@@ -16,6 +16,12 @@ class FlutterSecureStore implements SecureStore {
       : storage = s ??
             const FlutterSecureStorage(
               aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              // macOS/iOS: use the legacy keychain so a locally-signed dev
+              // build (no development certificate) can access the keychain
+              // without the keychain-access-groups entitlement (which requires
+              // a paid Apple team). Avoids error -34018 under App Sandbox.
+              mOptions: MacOsOptions(useDataProtectionKeyChain: false),
+              iOptions: IOSOptions(),
             );
 
   @override

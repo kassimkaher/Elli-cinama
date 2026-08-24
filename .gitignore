@@ -1,0 +1,30 @@
+# ── GitHub scope ────────────────────────────────────────────────────────────
+# Only the NEW Flutter app (abk_flutter/) and the project docs (docs/) are
+# intended for GitHub. The legacy DECOMPILED Android projects are reverse-
+# engineering INPUTS only and must never be pushed.
+
+# Legacy decompiled Android apps (JADX output of the old APKs)
+/app/
+/4.3/
+
+# Legacy Android / Gradle root project files
+/build.gradle
+/settings.gradle
+/gradle.properties
+/.gradle/
+/local.properties
+*.iml
+/.idea/
+/.vscode/
+
+# OS / editor cruft
+.DS_Store
+**/.DS_Store
+
+# Never commit any local env/secret files
+*.env
+.env
+**/last_run.sanitized.json
+
+# Note: abk_flutter/ has its own .gitignore (build/, .dart_tool/, ephemeral, …).
+# tools/ and docs/ remain tracked as project deliverables.
