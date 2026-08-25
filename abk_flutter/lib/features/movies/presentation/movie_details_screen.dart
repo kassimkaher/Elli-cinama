@@ -9,6 +9,7 @@ import '../../../core/i18n/strings.dart';
 import '../../../shared/state/states.dart';
 import '../../../shared/widgets/badges.dart';
 import '../../../shared/widgets/buttons.dart';
+import '../../../shared/widgets/focusable.dart';
 import '../../../shared/widgets/images.dart';
 import '../../../shared/widgets/layout.dart';
 import '../../catalogue/catalogue_providers.dart';
@@ -90,12 +91,19 @@ class _DetailsBody extends ConsumerWidget {
       const SizedBox(height: AbkSpace.s20),
       actions,
       const SizedBox(height: AbkSpace.s24),
-      if ((info.plot ?? '').isNotEmpty)
-        Text(info.plot!, style: context.type.body.copyWith(color: c.textSecondary)),
-      if ((info.cast ?? '').isNotEmpty) ...[
-        const SizedBox(height: AbkSpace.s16),
-        _Field(label: 'Cast', value: info.cast!),
-      ],
+      // TV: a focus stop so the remote can reach + scroll the description/cast
+      // below the fold (otherwise nothing focusable lives here). No-op off-TV.
+      if ((info.plot ?? '').isNotEmpty || (info.cast ?? '').isNotEmpty)
+        ScrollFocusStop(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if ((info.plot ?? '').isNotEmpty)
+              Text(info.plot!, style: context.type.body.copyWith(color: c.textSecondary)),
+            if ((info.cast ?? '').isNotEmpty) ...[
+              const SizedBox(height: AbkSpace.s16),
+              _Field(label: 'Cast', value: info.cast!),
+            ],
+          ]),
+        ),
     ]);
 
     return CustomScrollView(slivers: [

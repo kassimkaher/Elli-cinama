@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/design/breakpoints.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import 'focusable.dart';
@@ -83,7 +85,7 @@ class AbkButton extends StatelessWidget {
   }
 }
 
-class AbkTextField extends StatelessWidget {
+class AbkTextField extends StatefulWidget {
   final TextEditingController? controller;
   final String label, hint;
   final bool readOnly, obscure, autofocus;
@@ -91,6 +93,7 @@ class AbkTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged, onSubmitted;
   final TextInputType? keyboardType;
   final FocusNode? focusNode;
+  final bool dense; // tighter vertical rhythm for height-constrained layouts
 
   const AbkTextField({
     super.key,
@@ -105,44 +108,154 @@ class AbkTextField extends StatelessWidget {
     this.onSubmitted,
     this.keyboardType,
     this.focusNode,
+    this.dense = false,
   });
+
+  @override
+  State<AbkTextField> createState() => _AbkTextFieldState();
+}
+
+class _AbkTextFieldState extends State<AbkTextField> {
+  FocusNode? _internal;
+  FocusNode get _node => widget.focusNode ?? (_internal ??= FocusNode());
+  bool _editing = false;
+
+  // On TV the field is focusable-but-not-editing until OK/SELECT, so D-pad focus
+  // never auto-opens the on-screen keyboard (which would trap the D-pad). The
+  // keyboard opens only when the user presses OK on the focused field.
+  bool get _tvGate => AbkBreakpoints.isTv && !widget.readOnly;
+
+  @override
+  void initState() {
+    super.initState();
+    _node.addListener(_onFocusChange);
+    // Rebuild the TV display when the value changes externally (e.g. QA autofill).
+    widget.controller?.addListener(_onValueChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant AbkTextField old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller?.removeListener(_onValueChange);
+      widget.controller?.addListener(_onValueChange);
+    }
+  }
+
+  void _onValueChange() {
+    if (mounted) setState(() {});
+  }
+
+  void _onFocusChange() {
+    if (!_node.hasFocus && _editing) setState(() => _editing = false);
+  }
+
+  void _beginEdit() {
+    setState(() => _editing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_node.hasFocus) return;
+      SystemChannels.textInput.invokeMethod('TextInput.show');
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.removeListener(_onValueChange);
+    _node.removeListener(_onFocusChange);
+    _internal?.dispose();
+    super.dispose();
+  }
+
+  Widget _editableField(BuildContext context) {
+    final c = context.c;
+    return TextField(
+      controller: widget.controller,
+      focusNode: _node,
+      readOnly: widget.readOnly,
+      obscureText: widget.obscure,
+      autofocus: widget.autofocus || _editing,
+      keyboardType: widget.keyboardType,
+      onChanged: widget.onChanged,
+      onSubmitted: (v) {
+        if (_tvGate) setState(() => _editing = false);
+        widget.onSubmitted?.call(v);
+      },
+      style: context.type.body,
+      cursorColor: c.accentPrimary,
+      decoration: InputDecoration(
+        hintText: widget.hint,
+        hintStyle: context.type.body.copyWith(color: c.textMuted),
+        filled: true,
+        fillColor: c.surfaceElevated,
+        isDense: true,
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: 14, vertical: widget.dense ? 10 : 14),
+        suffixIcon: widget.trailing,
+        enabledBorder: OutlineInputBorder(
+            borderRadius: AbkRadius.brSm, borderSide: BorderSide(color: c.borderSubtle)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: AbkRadius.brSm, borderSide: BorderSide(color: c.accentPrimary, width: 2)),
+        border: OutlineInputBorder(borderRadius: AbkRadius.brSm, borderSide: BorderSide(color: c.borderSubtle)),
+      ),
+    );
+  }
+
+  /// TV display state: a focusable "field" that does NOT consume the D-pad (a
+  /// real TextField eats arrow keys for cursor movement, trapping focus). OK
+  /// switches to the editable field and opens the keyboard.
+  Widget _tvDisplayField(BuildContext context) {
+    final c = context.c;
+    final text = widget.controller?.text ?? '';
+    final hasVal = text.isNotEmpty;
+    final shown = widget.obscure && hasVal
+        ? '•' * text.length.clamp(1, 16)
+        : (hasVal ? text : widget.hint);
+    return AbkFocusable(
+      onTap: _beginEdit,
+      autofocus: widget.autofocus,
+      radius: AbkRadius.brSm,
+      semanticLabel: widget.label,
+      builder: (ctx, states) {
+        final focused = states.contains(WidgetState.focused);
+        return Container(
+          constraints: BoxConstraints(minHeight: widget.dense ? 42 : 50),
+          alignment: AlignmentDirectional.centerStart,
+          padding:
+              EdgeInsets.symmetric(horizontal: 14, vertical: widget.dense ? 8 : 12),
+          decoration: BoxDecoration(
+            color: c.surfaceElevated,
+            borderRadius: AbkRadius.brSm,
+            border: Border.all(
+                color: focused ? c.accentPrimary : c.borderSubtle,
+                width: focused ? 2 : 1),
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Text(shown,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.type.body
+                      .copyWith(color: hasVal ? c.textPrimary : c.textMuted)),
+            ),
+            if (widget.trailing != null) widget.trailing!,
+          ]),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final tvDisplay = _tvGate && !_editing;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (label.isNotEmpty) ...[
-          Text(label, style: context.type.caption.copyWith(color: c.textSecondary)),
-          const SizedBox(height: 6),
+        if (widget.label.isNotEmpty) ...[
+          Text(widget.label, style: context.type.caption.copyWith(color: c.textSecondary)),
+          SizedBox(height: widget.dense ? 4 : 6),
         ],
-        TextField(
-          controller: controller,
-          focusNode: focusNode,
-          readOnly: readOnly,
-          obscureText: obscure,
-          autofocus: autofocus,
-          keyboardType: keyboardType,
-          onChanged: onChanged,
-          onSubmitted: onSubmitted,
-          style: context.type.body,
-          cursorColor: c.accentPrimary,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: context.type.body.copyWith(color: c.textMuted),
-            filled: true,
-            fillColor: c.surfaceElevated,
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            suffixIcon: trailing,
-            enabledBorder: OutlineInputBorder(
-                borderRadius: AbkRadius.brSm, borderSide: BorderSide(color: c.borderSubtle)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: AbkRadius.brSm, borderSide: BorderSide(color: c.accentPrimary, width: 2)),
-            border: OutlineInputBorder(borderRadius: AbkRadius.brSm, borderSide: BorderSide(color: c.borderSubtle)),
-          ),
-        ),
+        tvDisplay ? _tvDisplayField(context) : _editableField(context),
       ],
     );
   }
@@ -154,6 +267,7 @@ class PasswordField extends StatefulWidget {
   final bool readOnly;
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged, onSubmitted;
+  final bool dense;
   const PasswordField({
     super.key,
     required this.controller,
@@ -165,6 +279,7 @@ class PasswordField extends StatefulWidget {
     this.focusNode,
     this.onChanged,
     this.onSubmitted,
+    this.dense = false,
   });
   @override
   State<PasswordField> createState() => _PasswordFieldState();
@@ -181,6 +296,7 @@ class _PasswordFieldState extends State<PasswordField> {
       hint: widget.hint,
       obscure: !_show,
       readOnly: widget.readOnly,
+      dense: widget.dense,
       onChanged: widget.onChanged,
       onSubmitted: widget.onSubmitted,
       trailing: IconButton(

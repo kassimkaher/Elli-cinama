@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/design/breakpoints.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
+import '../../core/i18n/strings.dart';
 import 'badges.dart';
 import 'focusable.dart';
 import 'images.dart';
@@ -61,7 +63,10 @@ class PosterCard extends StatelessWidget {
                   ),
                   child: Stack(fit: StackFit.expand, children: [
                     AnimatedScale(
-                      scale: active && !reduce ? 1.04 : 1.0,
+                      // On TV the whole card already grows (outer 1.06 ring), so
+                      // the inner artwork scale is dropped to avoid ~1.10 stacking
+                      // that clips neighbours.
+                      scale: active && !reduce && !AbkBreakpoints.isTv ? 1.04 : 1.0,
                       duration: reduce ? Duration.zero : AbkMotion.hover,
                       child: AbkImage(
                           url: imageUrl, radius: AbkRadius.brPoster, fallback: PosterFallback(title)),
@@ -83,9 +88,10 @@ class PosterCard extends StatelessWidget {
                         bottom: 8, left: 8, right: 8,
                         child: Row(children: [
                           Container(
-                            padding: const EdgeInsets.all(6),
+                            padding: EdgeInsets.all(AbkBreakpoints.isTv ? 8 : 6),
                             decoration: BoxDecoration(color: c.accentPrimary, shape: BoxShape.circle),
-                            child: Icon(Icons.play_arrow_rounded, size: 18, color: c.background),
+                            child: Icon(Icons.play_arrow_rounded,
+                                size: AbkBreakpoints.isTv ? 26 : 18, color: c.background),
                           ),
                         ]),
                       ),
@@ -95,7 +101,12 @@ class PosterCard extends StatelessWidget {
             )),
             const SizedBox(height: AbkSpace.s8),
             Text(title,
-                maxLines: 2, overflow: TextOverflow.ellipsis, style: context.type.cardTitle),
+                // TV: pin to one line so a focused card never reflows its row.
+                maxLines: AbkBreakpoints.isTv ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.cardTitle.copyWith(
+                    fontWeight: AbkBreakpoints.isTv && active ? FontWeight.w700 : null,
+                    color: AbkBreakpoints.isTv && active ? c.textPrimary : null)),
             if (!compact) MetadataRow(meta),
           ]);
         },
@@ -308,6 +319,11 @@ class LiveChannelRow extends StatelessWidget {
   final String? subtitle; // category, or "Now: …" when EPG exists
   final String? logoUrl;
   final bool live, locked, archive, favorite, selected;
+  // Large-screen preview states — independent layers so they coexist (a row can
+  // be focused + selected + playing). `selected` = loaded in the preview;
+  // `playing` = actually decoding; `loading` = switching source; `channelError`
+  // = failed to play.
+  final bool playing, loading, channelError;
   final VoidCallback? onTap;
   final VoidCallback? onToggleFavorite;
   final VoidCallback? onSecondary;
@@ -322,6 +338,9 @@ class LiveChannelRow extends StatelessWidget {
     this.archive = false,
     this.favorite = false,
     this.selected = false,
+    this.playing = false,
+    this.loading = false,
+    this.channelError = false,
     this.onTap,
     this.onToggleFavorite,
     this.onSecondary,
@@ -329,6 +348,12 @@ class LiveChannelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    // Leading state bar colour (priority: error > playing/loading/selected).
+    final barColor = channelError
+        ? c.error
+        : (playing || loading)
+            ? c.accentPrimary
+            : (selected ? c.accentPrimary.withValues(alpha: 0.6) : Colors.transparent);
     return AbkFocusable(
       onTap: onTap,
       onSecondary: onSecondary,
@@ -337,25 +362,57 @@ class LiveChannelRow extends StatelessWidget {
       semanticLabel: name,
       builder: (ctx, states) => Container(
         height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.only(right: 10, left: 10),
         decoration: BoxDecoration(
-          color: selected
-              ? c.surfaceStrong
-              : (states.contains(WidgetState.hovered) || states.contains(WidgetState.focused)
-                  ? c.surfaceElevated : Colors.transparent),
+          color: channelError
+              ? c.error.withValues(alpha: 0.08)
+              : playing
+                  ? c.accentPrimary.withValues(alpha: 0.10)
+                  : selected
+                      ? c.surfaceStrong
+                      : (states.contains(WidgetState.hovered) || states.contains(WidgetState.focused)
+                          ? c.surfaceElevated : Colors.transparent),
           borderRadius: AbkRadius.brSm,
           border: c.cardBorder ? Border.all(color: c.borderSubtle) : null,
         ),
         child: Row(children: [
+          // Leading state bar (directional start edge).
           Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: c.surfaceStrong, borderRadius: AbkRadius.brSm),
-            clipBehavior: Clip.antiAlias,
-            padding: const EdgeInsets.all(6),
-            child: locked
-                ? Icon(Icons.lock_rounded, size: 18, color: c.textMuted)
-                : AbkImage(url: logoUrl, fit: BoxFit.contain, fallback: LogoFallback(name)),
+            width: 3, height: 40,
+            decoration: BoxDecoration(color: barColor, borderRadius: AbkRadius.brPill),
           ),
+          const SizedBox(width: 8),
+          Stack(alignment: Alignment.center, children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(color: c.surfaceStrong, borderRadius: AbkRadius.brSm),
+              clipBehavior: Clip.antiAlias,
+              padding: const EdgeInsets.all(6),
+              child: locked
+                  ? Icon(Icons.lock_rounded, size: 18, color: c.textMuted)
+                  : AbkImage(url: logoUrl, fit: BoxFit.contain, fallback: LogoFallback(name)),
+            ),
+            // Leading indicator overlay: loading spinner / playing equalizer /
+            // error glyph — makes the actively-decoding channel unmistakable.
+            if (loading)
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(color: c.scrim, borderRadius: AbkRadius.brSm),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: c.accentPrimary),
+                ),
+              )
+            else if (channelError)
+              Icon(Icons.error_outline_rounded, size: 22, color: c.error)
+            else if (playing)
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                    color: c.accentPrimary.withValues(alpha: 0.28), borderRadius: AbkRadius.brSm),
+                child: Icon(Icons.graphic_eq_rounded, size: 22, color: c.accentPrimary),
+              ),
+          ]),
           const SizedBox(width: AbkSpace.s12),
           Expanded(
             child: Column(
@@ -363,11 +420,25 @@ class LiveChannelRow extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Row(children: [
-                  Flexible(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.type.cardTitle)),
-                  if (live) ...[const SizedBox(width: 8), const LiveBadge()],
+                  Flexible(
+                      child: Text(name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.type.cardTitle.copyWith(
+                              color: playing ? c.accentPrimary : null))),
+                  if (playing) ...[const SizedBox(width: 8), const LiveBadge()]
+                  else if (live) ...[const SizedBox(width: 8), const LiveBadge()],
                   if (archive) ...[const SizedBox(width: 6), const ArchiveBadge()],
                 ]),
-                if (subtitle != null)
+                if (loading)
+                  Text('$number  ·  ${context.tr('loading')}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: context.type.metadata.copyWith(color: c.accentPrimary))
+                else if (channelError)
+                  Text('$number  ·  ${context.tr('unavailable')}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: context.type.metadata.copyWith(color: c.error))
+                else if (subtitle != null)
                   Text('$number  ·  ${subtitle!}',
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: context.type.metadata)
                 else
@@ -403,12 +474,8 @@ class HeroBanner extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AbkRadius.brLg,
-      child: AspectRatio(
-        aspectRatio: AbkAspect.backdrop,
-        child: Stack(fit: StackFit.expand, children: [
-          AbkImage(url: backdropUrl, fallback: PosterFallback(title)),
+    final content = Stack(fit: StackFit.expand, children: [
+          AbkImage(url: backdropUrl, fit: BoxFit.cover, fallback: PosterFallback(title)),
           const Positioned.fill(child: BackdropScrim(heightFactor: 0.85)),
           Positioned(
             left: AbkSpace.s24, right: AbkSpace.s24, bottom: AbkSpace.s24,
@@ -433,9 +500,16 @@ class HeroBanner extends StatelessWidget {
               ],
             ),
           ),
-        ]),
-      ),
-    );
+        ]);
+    // On TV, cap the hero to ~half the viewport height (instead of a full-width
+    // 16:9 that eats the whole screen) so the first content rail peeks below and
+    // invites D-pad-down; the backdrop covers the shorter box.
+    final sized = AbkBreakpoints.isTv
+        ? SizedBox(
+            height: (MediaQuery.sizeOf(context).height * 0.52).clamp(240.0, 480.0),
+            child: content)
+        : AspectRatio(aspectRatio: AbkAspect.backdrop, child: content);
+    return ClipRRect(borderRadius: AbkRadius.brLg, child: sized);
   }
 }
 

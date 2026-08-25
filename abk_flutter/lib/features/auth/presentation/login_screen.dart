@@ -8,6 +8,7 @@ import '../../../core/design/tokens.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/i18n/strings.dart';
 import '../../../shared/widgets/brand.dart';
+import '../../../shared/widgets/focusable.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/images.dart';
 import 'auth_controller.dart';
@@ -40,56 +41,63 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         .login(_user.text.trim(), _pass.text);
   }
 
+  /// Centres the child when it fits and scrolls it (D-pad focus auto-reveals
+  /// each control) when the viewport is short — so nothing is ever clipped on a
+  /// low-logical-height TV/projector (e.g. 960×540 at dpr 2.0).
+  Widget _scrollCenter(Widget child) => LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: child),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return AlwaysDark(
       child: Builder(
         builder: (context) {
           final wc = context.wc;
-          final split =
+          final largeScreen =
               AbkBreakpoints.isDesktopClass(wc) || wc == WidthClass.tv;
-          final form = _Form(
-            user: _user,
-            pass: _pass,
-            passFocus: _passFocus,
-            onSubmit: _submit,
-          );
           return Scaffold(
             backgroundColor: context.c.background,
-            body: split
-                ? Row(
+            body: SafeArea(
+              // Height-aware: adapt to BOTH width and available height, not width
+              // alone. A wide-but-short viewport (e.g. a TV at 960×540 logical)
+              // must NOT keep the tall side-by-side branding split — it starves
+              // the form and pushes the QA card off-screen.
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final tallEnough = constraints.maxHeight >= 620;
+                  final split = largeScreen && tallEnough;
+                  // Compact vertical rhythm whenever height is tight or on TV.
+                  final compact = !tallEnough || AbkBreakpoints.isTv;
+                  final form = _Form(
+                    user: _user,
+                    pass: _pass,
+                    passFocus: _passFocus,
+                    onSubmit: _submit,
+                    dense: largeScreen || compact,
+                    compact: compact,
+                  );
+                  if (!split) return _scrollCenter(form);
+                  return Row(
                     children: [
-                      SizedBox(width: 460, child: Center(child: form)),
-                      Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Container(color: context.c.surface),
-                            const Positioned.fill(
-                              child: BackdropScrim(heightFactor: 1),
-                            ),
-                            Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const AbkLogo.mark(size: 104),
-                                  const SizedBox(height: AbkSpace.s20),
-                                  Text(
-                                    'ABK',
-                                    style: context.type.hero.copyWith(
-                                      color: context.c.textPrimary,
-                                      letterSpacing: 6,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                      // Form column: min(46%, 460) so the branding panel keeps
+                      // room on narrow logical widths.
+                      SizedBox(
+                        width: (MediaQuery.sizeOf(context).width * 0.46)
+                            .clamp(360.0, 460.0),
+                        child: _scrollCenter(form),
                       ),
+                      Expanded(child: _BrandingPanel()),
                     ],
-                  )
-                : Center(child: SingleChildScrollView(child: form)),
+                  );
+                },
+              ),
+            ),
           );
         },
       ),
@@ -97,15 +105,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
+/// Full-height cinematic branding panel — shown only on tall large-screen
+/// layouts (desktop / TV with enough height). On short viewports the form goes
+/// full-width instead, with a small inline lockup carrying the brand.
+class _BrandingPanel extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: context.c.surface),
+          const Positioned.fill(child: BackdropScrim(heightFactor: 1)),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AbkLogo.mark(size: 96),
+                const SizedBox(height: AbkSpace.s16),
+                Text('ABK',
+                    style: context.type.hero.copyWith(
+                        color: context.c.textPrimary, letterSpacing: 6)),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
 class _Form extends ConsumerWidget {
   final TextEditingController user, pass;
   final FocusNode passFocus;
   final VoidCallback onSubmit;
+  final bool dense;
+  final bool compact;
   const _Form({
     required this.user,
     required this.pass,
     required this.passFocus,
     required this.onSubmit,
+    this.dense = false,
+    this.compact = false,
   });
 
   @override
@@ -116,23 +154,30 @@ class _Form extends ConsumerWidget {
     final error = auth is AuthError ? auth : null;
     final qa = ref.watch(qaCredentialsProvider);
 
+    // Compact vertical rhythm so the whole form fits a low logical height. When
+    // `compact` (short/height-constrained, e.g. TV 540) the branding panel is
+    // gone, so a small inline logo carries the brand and the subtitle is dropped.
+    final gapLg = compact ? AbkSpace.s12 : (dense ? AbkSpace.s16 : AbkSpace.s24);
+    final gapField = compact ? AbkSpace.s12 : AbkSpace.s16;
+    final logo = compact ? 40.0 : (dense ? 56.0 : 100.0);
+
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 380),
+      constraints: BoxConstraints(maxWidth: compact ? 440 : 380),
       child: Padding(
-        padding: const EdgeInsets.all(AbkSpace.s24),
+        padding: EdgeInsets.symmetric(
+            horizontal: AbkSpace.s24, vertical: dense ? AbkSpace.s16 : AbkSpace.s24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(child: const AbkLogo.chip(size: 100)),
-            const SizedBox(height: AbkSpace.s24),
+            Center(child: AbkLogo.chip(size: logo)),
+            SizedBox(height: gapLg),
             Text(context.tr('loginTitle'), style: context.type.pageTitle),
-            const SizedBox(height: AbkSpace.s4),
-            Text(
-              context.tr('loginSubtitle'),
-              style: context.type.bodySecondary,
-            ),
-            const SizedBox(height: AbkSpace.s24),
+            if (!compact) ...[
+              const SizedBox(height: AbkSpace.s4),
+              Text(context.tr('loginSubtitle'), style: context.type.bodySecondary),
+            ],
+            SizedBox(height: gapLg),
             if (error != null && error.kind == AuthErrorKind.network)
               _Banner(context.tr('connectionError'), c.error),
             AbkTextField(
@@ -141,9 +186,11 @@ class _Form extends ConsumerWidget {
               label: context.tr('username'),
               hint: context.tr('enterUsername'),
               readOnly: authing,
+              dense: compact,
+              autofocus: true, // visible initial focus on first frame (TV)
               onSubmitted: (_) => passFocus.requestFocus(),
             ),
-            const SizedBox(height: AbkSpace.s16),
+            SizedBox(height: gapField),
             PasswordField(
               key: const Key('login_pass'),
               controller: pass,
@@ -153,6 +200,7 @@ class _Form extends ConsumerWidget {
               showLabel: context.tr('show'),
               hideLabel: context.tr('hide'),
               readOnly: authing,
+              dense: compact,
               onSubmitted: (_) => onSubmit(),
             ),
             if (error != null && error.kind == AuthErrorKind.auth) ...[
@@ -162,7 +210,7 @@ class _Form extends ConsumerWidget {
                 style: context.type.caption.copyWith(color: c.error),
               ),
             ],
-            const SizedBox(height: AbkSpace.s24),
+            SizedBox(height: gapLg),
             AbkButton(
               key: const Key('login_submit'),
               authing ? context.tr('signingIn') : context.tr('signIn'),
@@ -171,12 +219,15 @@ class _Form extends ConsumerWidget {
               onPressed: authing ? null : onSubmit,
             ),
             if (qa != null) ...[
-              const SizedBox(height: AbkSpace.s16),
+              SizedBox(height: gapField),
               _QaAutofillCard(
                 enabled: !authing,
                 onTap: () {
                   user.text = qa.username;
                   pass.text = qa.password;
+                  // After filling, move focus to Login (the control just above)
+                  // so the remote user can press SELECT to sign in.
+                  FocusScope.of(context).previousFocus();
                 },
               ),
             ],
@@ -201,21 +252,25 @@ class _QaAutofillCard extends StatelessWidget {
     final c = context.c;
     return Opacity(
       opacity: enabled ? 1 : 0.5,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          key: const Key('qa_autofill'),
-          onTap: enabled ? onTap : null,
-          borderRadius: AbkRadius.brSm,
-          child: Container(
+      // AbkFocusable → reachable by D-pad, activates on SELECT/OK/Enter, shows
+      // the standard focus ring, and auto-scrolls into view when focused.
+      child: AbkFocusable(
+        key: const Key('qa_autofill'),
+        onTap: enabled ? onTap : null,
+        disabled: !enabled,
+        radius: AbkRadius.brSm,
+        semanticLabel: context.tr('qaAccount'),
+        builder: (ctx, states) {
+          final focused = states.contains(WidgetState.focused);
+          return Container(
             padding: const EdgeInsets.symmetric(
               horizontal: AbkSpace.s12,
               vertical: AbkSpace.s12,
             ),
             decoration: BoxDecoration(
-              color: c.surface,
+              color: focused ? c.surfaceStrong : c.surface,
               borderRadius: AbkRadius.brSm,
-              border: Border.all(color: c.borderSubtle),
+              border: Border.all(color: focused ? c.accentPrimary : c.borderSubtle),
             ),
             child: Row(
               children: [
@@ -225,26 +280,18 @@ class _QaAutofillCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        context.tr('qaAccount'),
-                        style: context.type.caption.copyWith(
-                          color: c.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        context.tr('qaFillHint'),
-                        style: context.type.metadata.copyWith(
-                          color: c.textMuted,
-                        ),
-                      ),
+                      Text(context.tr('qaAccount'),
+                          style: context.type.caption.copyWith(color: c.textPrimary)),
+                      Text(context.tr('qaFillHint'),
+                          style: context.type.metadata.copyWith(color: c.textMuted)),
                     ],
                   ),
                 ),
                 Icon(Icons.bolt_rounded, size: 16, color: c.textMuted),
               ],
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

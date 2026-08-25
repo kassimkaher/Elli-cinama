@@ -7,6 +7,7 @@
 FLUTTER      ?= flutter
 DEVICE       ?=                       # e.g. DEVICE=00008120-00127596216A601E  (or bf5c6761 / macos)
 EXPORT_METHOD ?= development          # ipa: development | ad-hoc | app-store | enterprise
+ANDROID_HOME ?= $(HOME)/Library/Android/sdk
 QA_FILE      := qa-defines.json
 DIST         := build/dist
 
@@ -16,7 +17,7 @@ DEVICE_FLAG  := $(if $(DEVICE),-d $(DEVICE),)
 
 .DEFAULT_GOAL := help
 .PHONY: help pub clean gen icons analyze test doctor \
-        apk apk-split aab ios ipa macos windows-enable windows \
+        apk apk-split aab tv-apk tv-aab tv-run ios ipa macos windows-enable windows \
         run run-release run-debug release-all dist
 
 ## ---- meta -----------------------------------------------------------------
@@ -53,6 +54,23 @@ apk-split:  ## Release APKs split per ABI (smaller)
 
 aab:  ## Release App Bundle (Play Store) -> build/app/outputs/bundle/release/app-release.aab
 	$(FLUTTER) build appbundle --release
+
+tv-apk:  ## Release APK for Android TV / Google TV (same APK; verifies leanback entry)
+	$(FLUTTER) build apk --release
+	@echo "== Android TV manifest check =="
+	@AAPT="$$(ls -d $(ANDROID_HOME)/build-tools/*/ 2>/dev/null | sort -V | tail -1)aapt2"; \
+	 APK=build/app/outputs/flutter-apk/app-release.apk; \
+	 if [ -x "$$AAPT" ]; then \
+	   "$$AAPT" dump badging "$$APK" 2>/dev/null | grep -iE "leanback-launchable-activity|banner=|uses-feature-not-required.*(leanback|touchscreen)" \
+	     && echo "TV-ready APK -> $$APK" || echo "WARNING: leanback entry not found"; \
+	 else echo "(aapt2 not found — built $$APK, skipped verify)"; fi
+
+tv-aab:  ## Release App Bundle for Android TV (Play Store TV track)
+	$(FLUTTER) build appbundle --release
+	@echo "TV AAB -> build/app/outputs/bundle/release/app-release.aab"
+
+tv-run:  ## Run on a TV emulator/device, forcing TV mode (DEVICE=emulator-5554)
+	$(FLUTTER) run --release $(DEVICE_FLAG) --dart-define=ABK_FORCE_TV=true $(QA_FLAG)
 
 ## ---- iOS (macOS host only) ------------------------------------------------
 ios:  ## Release Runner.app (no packaging) -> build/ios/iphoneos/Runner.app

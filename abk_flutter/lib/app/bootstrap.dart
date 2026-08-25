@@ -37,6 +37,15 @@ Future<ProviderContainer> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   _registerApplePlaybackAdapter();
   AbkBreakpoints.isTv = await _isAndroidTv(); // drives the 10-foot presentation
+  if (AbkBreakpoints.isTv) {
+    // TV/remote root-cause fix: FocusManager boots in `touch` highlight mode, so
+    // focus rings do NOT paint until the first key event flips the mode — the
+    // "screen only settles after the first D-pad press" symptom. Force the
+    // traditional (focus-ring) highlight up front so the very first frame shows
+    // a visible focus. TV has no pointer, so this never mis-highlights a click.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+  }
   final prefs = await SharedPreferences.getInstance();
   final model = await _deviceModel();
 

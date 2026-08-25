@@ -7,6 +7,7 @@ import '../../../core/i18n/strings.dart';
 import '../../../shared/state/states.dart';
 import '../../../shared/widgets/badges.dart';
 import '../../../shared/widgets/buttons.dart';
+import '../../../shared/widgets/focusable.dart';
 import '../../../shared/widgets/cards.dart';
 import '../../../shared/widgets/images.dart';
 import '../../../shared/widgets/layout.dart';
@@ -59,7 +60,10 @@ class SeriesDetailsScreen extends ConsumerWidget {
                       MetadataRow([d.info?.genre ?? series.genre, series.releaseDate, series.rating]),
                       const SizedBox(height: AbkSpace.s16),
                       if ((d.info?.plot ?? series.plot ?? '').isNotEmpty)
-                        Text(d.info?.plot ?? series.plot!, style: context.type.body.copyWith(color: c.textSecondary)),
+                        ScrollFocusStop(
+                          child: Text(d.info?.plot ?? series.plot!,
+                              style: context.type.body.copyWith(color: c.textSecondary)),
+                        ),
                       const SizedBox(height: AbkSpace.s20),
                       if (seasons.length > 1)
                         FilterChipRow<int>(

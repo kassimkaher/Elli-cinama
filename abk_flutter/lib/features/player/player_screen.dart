@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/design/breakpoints.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../core/di/providers.dart';
@@ -12,6 +13,7 @@ import '../../core/i18n/strings.dart';
 import '../../core/player/playback_service.dart';
 import '../../core/player/video_player_playback_service.dart';
 import '../../shared/widgets/buttons.dart';
+import '../../shared/widgets/focusable.dart';
 import '../catalogue/catalogue_providers.dart';
 import '../epg/domain/entities.dart';
 import '../favorites/playback_history_repository.dart';
@@ -87,6 +89,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   List<EpgListing> _epg = const [];
 
+  /// Android TV / Google TV: controls become a real, D-pad-focusable surface
+  /// (focus ring, SELECT activates, focusable progress bar). Off-TV keeps the
+  /// touch/mouse behaviour (tap, double-tap seek, drag scrub) untouched.
+  bool get _tv => AbkBreakpoints.isTv;
+  // On TV, focus lands on Play/Pause whenever the controls are (re)shown.
+  final FocusNode _playPauseFocus = FocusNode(debugLabel: 'player.playPause');
+  // Holds focus while the controls are hidden so the next D-pad press is caught
+  // and re-reveals the surface (PLAYER_VIEW_MODE → CONTROLS_FOCUSED_MODE).
+  final FocusNode _rootFocus = FocusNode(debugLabel: 'player.root');
+  // True while the focusable progress bar is the focused control (the timeline
+  // sub-mode), so BACK returns to the controls instead of hiding them.
+  bool _timelineFocused = false;
+
   PlaybackItem get _item => widget.items[_i];
   bool get _seekable => !_item.live && _state.duration > Duration.zero;
 
@@ -140,6 +155,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (mounted) {
         _open();
         _bumpControls();
+        // TV: controls start visible → land initial focus on Play/Pause so the
+        // remote user begins on a real control (never on empty space).
+        if (_tv) _playPauseFocus.requestFocus();
       }
     });
   }
@@ -269,11 +287,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // ---- controls / lifecycle -------------------------------------------------
 
   void _bumpControls() {
+    final wasHidden = !_controls;
     setState(() => _controls = true);
+    // On TV, when the surface is (re)shown, land focus on Play/Pause so the
+    // remote user starts on a sensible control (never on nothing).
+    if (_tv && wasHidden) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controls) _playPauseFocus.requestFocus();
+      });
+    }
+    _restartHideTimer();
+  }
+
+  /// (Re)arm the auto-hide. On TV the surface must NOT vanish while the user is
+  /// actively navigating it, so any key resets this (see the root key handler);
+  /// it also never hides mid-drag.
+  void _restartHideTimer() {
     _hide?.cancel();
     _hide = Timer(const Duration(seconds: 4), () {
-      if (mounted && !_dragging) setState(() => _controls = false);
+      if (mounted && !_dragging) _hideControls();
     });
+  }
+
+  /// Hide the control surface. On TV, park focus on the invisible root node so
+  /// the next D-pad press is caught and re-reveals the controls.
+  void _hideControls() {
+    _hide?.cancel();
+    setState(() => _controls = false);
+    if (_tv) _rootFocus.requestFocus();
   }
 
   Future<void> _toggleFullscreen() async {
@@ -304,6 +345,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _switchTimer?.cancel();
     _seekFlashTimer?.cancel();
     _sub?.cancel();
+    _playPauseFocus.dispose();
+    _rootFocus.dispose();
     _svc.stop(); // full release → no lingering audio, no orphan decoder
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -317,34 +360,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       child: Builder(builder: (context) {
         final c = context.c;
         return PopScope(
-          // BACK exits fullscreen, then hides controls, then leaves the player.
+          // Deterministic BACK hierarchy:
+          //   fullscreen        → leave fullscreen
+          //   timeline sub-mode → return to the control layer (Play/Pause)
+          //   controls visible  → hide the controls
+          //   otherwise         → leave the player
           canPop: !_controls && !_fullscreen,
           onPopInvokedWithResult: (didPop, _) {
             if (didPop) return;
             if (_fullscreen) {
               _toggleFullscreen();
+            } else if (_tv && _timelineFocused) {
+              _playPauseFocus.requestFocus();
+              _bumpControls();
             } else if (_controls) {
-              setState(() => _controls = false);
+              _hideControls();
             }
           },
           child: Scaffold(
           backgroundColor: Colors.black,
           body: Shortcuts(
-            shortcuts: const {
-              SingleActivator(LogicalKeyboardKey.space): _PlayPauseIntent(),
-              SingleActivator(LogicalKeyboardKey.mediaPlayPause): _PlayPauseIntent(),
-              SingleActivator(LogicalKeyboardKey.keyF): _FsIntent(),
-              SingleActivator(LogicalKeyboardKey.escape): _EscIntent(),
-              SingleActivator(LogicalKeyboardKey.arrowUp): _PrevIntent(),
-              SingleActivator(LogicalKeyboardKey.arrowDown): _NextIntent(),
-              SingleActivator(LogicalKeyboardKey.mediaTrackPrevious): _PrevIntent(),
-              SingleActivator(LogicalKeyboardKey.mediaTrackNext): _NextIntent(),
-              SingleActivator(LogicalKeyboardKey.arrowLeft): _Back10Intent(),
-              SingleActivator(LogicalKeyboardKey.arrowRight): _Fwd10Intent(),
-              // D-pad OK / SELECT.
-              SingleActivator(LogicalKeyboardKey.select): _SelectIntent(),
-              SingleActivator(LogicalKeyboardKey.gameButtonA): _SelectIntent(),
-            },
+            shortcuts: _shortcuts(),
             child: Actions(
               actions: {
                 _PlayPauseIntent: CallbackAction<_PlayPauseIntent>(
@@ -393,7 +429,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 }),
               },
               child: Focus(
-                autofocus: true,
+                focusNode: _rootFocus,
+                // Off-TV a keyboard user gets immediate space/F/Esc; on TV the
+                // root stays out of directional traversal but still catches keys
+                // (to keep the surface alive / re-reveal it) as an ancestor.
+                autofocus: !_tv,
+                skipTraversal: _tv,
+                onKeyEvent: _onRootKey,
                 child: MouseRegion(
                   onHover: (_) => _bumpControls(),
                   child: LayoutBuilder(builder: (context, box) {
@@ -406,7 +448,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       Positioned.fill(
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _controls = !_controls),
+                          onTap: () => _controls ? _hideControls() : _bumpControls(),
                           onDoubleTapDown: (d) => _onDoubleTapZone(d, box.maxWidth),
                           onDoubleTap: () {}, // enables double-tap recognition
                         ),
@@ -424,6 +466,56 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ));
       }),
     );
+  }
+
+  /// Media/hardware keys work in every mode. On TV the D-pad arrows and OK are
+  /// deliberately NOT global shortcuts — they drive focus traversal between the
+  /// visible controls (and LEFT/RIGHT scrubbing once the progress bar is
+  /// focused). Off-TV the arrows keep their direct seek / channel shortcuts.
+  Map<ShortcutActivator, Intent> _shortcuts() {
+    return {
+      const SingleActivator(LogicalKeyboardKey.space): const _PlayPauseIntent(),
+      const SingleActivator(LogicalKeyboardKey.mediaPlayPause): const _PlayPauseIntent(),
+      const SingleActivator(LogicalKeyboardKey.keyF): const _FsIntent(),
+      const SingleActivator(LogicalKeyboardKey.escape): const _EscIntent(),
+      const SingleActivator(LogicalKeyboardKey.mediaTrackPrevious): const _PrevIntent(),
+      const SingleActivator(LogicalKeyboardKey.mediaTrackNext): const _NextIntent(),
+      if (!_tv) ...{
+        const SingleActivator(LogicalKeyboardKey.arrowUp): const _PrevIntent(),
+        const SingleActivator(LogicalKeyboardKey.arrowDown): const _NextIntent(),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): const _Back10Intent(),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): const _Fwd10Intent(),
+        const SingleActivator(LogicalKeyboardKey.select): const _SelectIntent(),
+        const SingleActivator(LogicalKeyboardKey.gameButtonA): const _SelectIntent(),
+      },
+    };
+  }
+
+  // D-pad keys that drive the TV control surface (LogicalKeyboardKey overrides
+  // ==, so this can't be a const Set — a plain predicate keeps it simple).
+  bool _isDpadKey(LogicalKeyboardKey k) =>
+      k == LogicalKeyboardKey.arrowUp ||
+      k == LogicalKeyboardKey.arrowDown ||
+      k == LogicalKeyboardKey.arrowLeft ||
+      k == LogicalKeyboardKey.arrowRight ||
+      k == LogicalKeyboardKey.select ||
+      k == LogicalKeyboardKey.gameButtonA ||
+      k == LogicalKeyboardKey.enter;
+
+  /// Root (ancestor) key handler for TV. When the controls are hidden, the first
+  /// D-pad press reveals + enters them (swallowed so it does not also seek/move).
+  /// When they are visible, any D-pad key keeps the surface alive and is passed
+  /// through so the focused control / directional traversal handles it.
+  KeyEventResult _onRootKey(FocusNode node, KeyEvent e) {
+    if (!_tv) return KeyEventResult.ignored;
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    if (!_isDpadKey(e.logicalKey)) return KeyEventResult.ignored;
+    if (!_controls) {
+      _bumpControls(); // show + focus Play/Pause
+      return KeyEventResult.handled; // swallow this press
+    }
+    _restartHideTimer(); // navigating → do not auto-hide
+    return KeyEventResult.ignored; // let the focused control / traversal act
   }
 
   Widget _surface() {
@@ -509,154 +601,204 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Widget _overlay(dynamic c) {
-    final now = _epg.isNotEmpty ? _epg[0].title : null;
-    final next = _epg.length > 1 ? _epg[1].title : null;
+    final playing = _state.status == PlaybackStatus.playing;
     return AnimatedOpacity(
+      key: const Key('player_controls'),
       opacity: _controls ? 1 : 0,
       duration: _controls ? AbkMotion.searchIn : AbkMotion.overlayOut,
       child: IgnorePointer(
         ignoring: !_controls,
-        child: Column(children: [
-          // ---- top bar ----
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent]),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Row(children: [
-                IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white)),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.type.cardTitle.copyWith(color: Colors.white)),
-                        if (now != null)
-                          Text('${context.tr('liveBadge')}: $now',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.type.caption.copyWith(color: c.accentPrimary))
-                        else if (_item.subtitle != null)
-                          Text(_item.subtitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.type.caption.copyWith(color: Colors.white70)),
-                        if (next != null)
-                          Text('› $next',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.type.caption.copyWith(color: Colors.white54)),
-                      ]),
-                ),
-                if (_item.live)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                        color: c.accentSecondary, borderRadius: AbkRadius.brXs),
-                    child: Text(context.tr('liveBadge'),
-                        style: context.type.metadata
-                            .copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
-                  ),
-              ]),
-            ),
+        // Hidden (opacity-0) controls must not be D-pad focus targets on TV, or
+        // the remote could focus an invisible button. ExcludeFocus drops them
+        // from traversal and releases focus while the surface is hidden.
+        child: ExcludeFocus(
+          excluding: !_controls,
+          child: Column(children: [
+            _topBar(c),
+            const Spacer(),
+            // Touch/desktop keep the big centred transport; on TV every control
+            // lives in the (focusable) bottom bar so the D-pad path stays linear.
+            if (!_tv && !_item.live) _centerTransport(playing),
+            const Spacer(),
+            _bottomBar(c, playing),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  // ---- top bar (Back + title + EPG/live) ----
+  Widget _topBar(dynamic c) {
+    final now = _epg.isNotEmpty ? _epg[0].title : null;
+    final next = _epg.length > 1 ? _epg[1].title : null;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent]),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Row(children: [
+          _PlayerBtn(
+            icon: Icons.arrow_back_rounded,
+            tooltip: context.tr('back'),
+            onTap: () => Navigator.of(context).maybePop(),
           ),
-          const Spacer(),
-          // ---- centre transport (VOD gets ±10s + play/pause) ----
-          if (!_item.live)
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              _RoundBtn(
-                  icon: Icons.replay_10_rounded,
-                  onTap: _seekable ? () => _seekBy(-10) : null),
-              const SizedBox(width: 28),
-              _RoundBtn(
-                  icon: _state.status == PlaybackStatus.playing
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  size: 46,
-                  onTap: _togglePlay),
-              const SizedBox(width: 28),
-              _RoundBtn(
-                  icon: Icons.forward_10_rounded,
-                  onTap: _seekable ? () => _seekBy(10) : null),
-            ]),
-          const Spacer(),
-          // ---- bottom bar ----
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent]),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Column(children: [
-                if (!_item.live) _progress(c),
-                Row(children: [
-                  if (widget.items.length > 1) ...[
-                    IconButton(
-                      onPressed: _hasPrev ? () => _go(-1) : null,
-                      tooltip: _item.live
-                          ? context.tr('prevChannel')
-                          : context.tr('prevEpisode'),
-                      icon: Icon(
-                          _item.live
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.skip_previous_rounded,
-                          color: _hasPrev ? Colors.white : Colors.white30),
-                    ),
-                    IconButton(
-                      onPressed: _hasNext ? () => _go(1) : null,
-                      tooltip: _item.live
-                          ? context.tr('nextChannel')
-                          : context.tr('nextEpisode'),
-                      icon: Icon(
-                          _item.live
-                              ? Icons.keyboard_arrow_down_rounded
-                              : Icons.skip_next_rounded,
-                          color: _hasNext ? Colors.white : Colors.white30),
-                    ),
-                  ],
-                  IconButton(
-                    onPressed: _togglePlay,
-                    icon: Icon(
-                        _state.status == PlaybackStatus.playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: Colors.white,
-                        size: 30),
-                  ),
-                  if (!_item.live)
-                    Text('${_fmt(_displayPos())} / ${_fmt(_state.duration)}',
-                        style: context.type.playerControl.copyWith(color: Colors.white)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _toggleFullscreen,
-                    icon: Icon(
-                        _fullscreen
-                            ? Icons.fullscreen_exit_rounded
-                            : Icons.fullscreen_rounded,
-                        color: Colors.white),
-                  ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.type.cardTitle.copyWith(color: Colors.white)),
+                  if (now != null)
+                    Text('${context.tr('liveBadge')}: $now',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.type.caption.copyWith(color: c.accentPrimary))
+                  else if (_item.subtitle != null)
+                    Text(_item.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.type.caption.copyWith(color: Colors.white70)),
+                  if (next != null)
+                    Text('› $next',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.type.caption.copyWith(color: Colors.white54)),
                 ]),
-              ]),
-            ),
           ),
+          if (_item.live)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                  color: c.accentSecondary, borderRadius: AbkRadius.brXs),
+              child: Text(context.tr('liveBadge'),
+                  style: context.type.metadata
+                      .copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
         ]),
       ),
     );
   }
+
+  // ---- centre transport (touch/desktop VOD: big ±10s + play/pause) ----
+  Widget _centerTransport(bool playing) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _RoundBtn(
+              icon: Icons.replay_10_rounded,
+              onTap: _seekable ? () => _seekBy(-10) : null),
+          const SizedBox(width: 28),
+          _RoundBtn(
+              icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              size: 46,
+              onTap: _togglePlay),
+          const SizedBox(width: 28),
+          _RoundBtn(
+              icon: Icons.forward_10_rounded,
+              onTap: _seekable ? () => _seekBy(10) : null),
+        ],
+      );
+
+  // ---- bottom bar (progress + focusable control row) ----
+  Widget _bottomBar(dynamic c, bool playing) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent]),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(children: [
+          // VOD progress: a first-class focusable timeline on TV (LEFT/RIGHT
+          // scrub, UP/DOWN leave), the drag slider for touch/mouse elsewhere.
+          if (!_item.live) (_tv ? _tvTimeline(c) : _progress(c)),
+          Row(children: _bottomControls(playing)),
+        ]),
+      ),
+    );
+  }
+
+  List<Widget> _bottomControls(bool playing) {
+    final playPause = _PlayerBtn(
+      focusNode: _playPauseFocus,
+      icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+      size: 30,
+      tooltip: context.tr(playing ? 'pause' : 'play'),
+      onTap: _togglePlay,
+    );
+    final row = <Widget>[];
+    final hasPlaylist = widget.items.length > 1;
+
+    // On TV, ±10s become real focusable controls (not just remote shortcuts).
+    if (_tv && !_item.live) {
+      row.add(_PlayerBtn(
+          icon: Icons.replay_10_rounded,
+          tooltip: '-10s',
+          onTap: _seekable ? () => _seekBy(-10) : null));
+    }
+    if (hasPlaylist) row.add(_channelBtn(prev: true));
+    row.add(playPause);
+    if (hasPlaylist) row.add(_channelBtn(prev: false));
+    if (_tv && !_item.live) {
+      row.add(_PlayerBtn(
+          icon: Icons.forward_10_rounded,
+          tooltip: '+10s',
+          onTap: _seekable ? () => _seekBy(10) : null));
+    }
+    if (!_item.live) {
+      row.add(Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Text('${_fmt(_displayPos())} / ${_fmt(_state.duration)}',
+            style: context.type.playerControl.copyWith(color: Colors.white)),
+      ));
+    }
+    row.add(const Spacer());
+    row.add(_PlayerBtn(
+      icon: _fullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+      tooltip: context.tr(_fullscreen ? 'exitFullscreen' : 'fullscreen'),
+      onTap: _toggleFullscreen,
+    ));
+    return row;
+  }
+
+  Widget _channelBtn({required bool prev}) {
+    final enabled = prev ? _hasPrev : _hasNext;
+    final live = _item.live;
+    final icon = live
+        ? (prev
+            ? Icons.keyboard_arrow_up_rounded
+            : Icons.keyboard_arrow_down_rounded)
+        : (prev ? Icons.skip_previous_rounded : Icons.skip_next_rounded);
+    return _PlayerBtn(
+      icon: icon,
+      tooltip: live
+          ? context.tr(prev ? 'prevChannel' : 'nextChannel')
+          : context.tr(prev ? 'prevEpisode' : 'nextEpisode'),
+      onTap: enabled ? () => _go(prev ? -1 : 1) : null,
+    );
+  }
+
+  Widget _tvTimeline(dynamic c) => _TvTimeline(
+        key: const Key('player_timeline'),
+        position: _state.position,
+        duration: _state.duration,
+        onSeek: (t) {
+          _svc.seek(t);
+          _bumpControls();
+        },
+        onActivity: _restartHideTimer,
+        onFocusChanged: (f) => _timelineFocused = f,
+      );
 
   Duration _displayPos() {
     if (_dragging && _state.duration > Duration.zero) {
@@ -729,6 +871,223 @@ class _RoundBtn extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           child: Icon(icon,
               color: onTap == null ? Colors.white30 : Colors.white, size: size),
+        ),
+      ),
+    );
+  }
+}
+
+/// A focusable player control. On TV it is a real D-pad focus target (focus
+/// ring + tint, SELECT/OK activates) via [AbkFocusable]; on touch/mouse it still
+/// activates on tap. A disabled ([onTap] == null) control is dimmed and, on TV,
+/// skipped by focus traversal so unavailable actions are never focus targets.
+class _PlayerBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final double size;
+  final FocusNode? focusNode;
+  final String? tooltip;
+  const _PlayerBtn({
+    required this.icon,
+    this.onTap,
+    this.size = 30,
+    this.focusNode,
+    this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final btn = AbkFocusable(
+      onTap: onTap,
+      disabled: !enabled,
+      focusNode: focusNode,
+      radius: AbkRadius.brMd,
+      semanticLabel: tooltip,
+      builder: (ctx, states) {
+        final focused = states.contains(WidgetState.focused);
+        final hover = states.contains(WidgetState.hovered);
+        return Container(
+          margin: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: focused
+                ? Colors.white.withValues(alpha: 0.22)
+                : (hover ? Colors.white.withValues(alpha: 0.10) : Colors.transparent),
+            borderRadius: AbkRadius.brMd,
+          ),
+          child: Icon(icon,
+              color: enabled ? Colors.white : Colors.white30, size: size),
+        );
+      },
+    );
+    return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
+  }
+}
+
+/// A first-class, D-pad-focusable progress bar for TV (TIMELINE_FOCUSED_MODE).
+/// When focused, LEFT/RIGHT nudge a pending seek target (repeat/hold accelerates
+/// naturally via key-repeat), the target time is shown, and the real seek is
+/// debounced. UP/DOWN and SELECT bubble so focus can leave the timeline.
+class _TvTimeline extends StatefulWidget {
+  final Duration position;
+  final Duration duration;
+  final void Function(Duration target) onSeek;
+  final VoidCallback onActivity;
+  final ValueChanged<bool> onFocusChanged;
+  const _TvTimeline({
+    super.key,
+    required this.position,
+    required this.duration,
+    required this.onSeek,
+    required this.onActivity,
+    required this.onFocusChanged,
+  });
+
+  @override
+  State<_TvTimeline> createState() => _TvTimelineState();
+}
+
+class _TvTimelineState extends State<_TvTimeline> {
+  final FocusNode _node = FocusNode(debugLabel: 'player.timeline');
+  bool _focused = false;
+  double? _target; // 0..1 pending seek target while adjusting
+  Timer? _debounce;
+
+  static const int _stepMs = 10000; // 10s per press
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _node.dispose();
+    super.dispose();
+  }
+
+  double get _current {
+    final d = widget.duration.inMilliseconds;
+    if (d <= 0) return 0;
+    return (widget.position.inMilliseconds / d).clamp(0.0, 1.0);
+  }
+
+  void _nudge(int dir) {
+    final d = widget.duration.inMilliseconds;
+    if (d <= 0) return;
+    final base = _target ?? _current;
+    final t = (base + dir * _stepMs / d).clamp(0.0, 1.0);
+    setState(() => _target = t);
+    widget.onActivity();
+    // Debounce the real seek so a burst of presses issues one decode seek.
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      final tt = _target;
+      if (tt != null) widget.onSeek(widget.duration * tt);
+      if (mounted) setState(() => _target = null);
+    });
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.arrowLeft) {
+      _nudge(-1);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowRight) {
+      _nudge(1);
+      return KeyEventResult.handled;
+    }
+    // UP/DOWN/SELECT bubble → focus leaves the timeline / acts elsewhere.
+    return KeyEventResult.ignored;
+  }
+
+  String _fmt(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours, m = d.inMinutes % 60, s = d.inSeconds % 60;
+    return h > 0 ? '${two(h)}:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final v = _target ?? _current;
+    final adjusting = _target != null;
+    final active = _focused || adjusting;
+    return Focus(
+      focusNode: _node,
+      onKeyEvent: _onKey,
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        widget.onFocusChanged(f);
+        if (f) widget.onActivity();
+      },
+      child: Semantics(
+        slider: true,
+        label: 'Seek',
+        value: _fmt(widget.duration * v),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Target-time readout floats above the thumb while adjusting/focused.
+            AnimatedOpacity(
+              opacity: active ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              child: Align(
+                alignment: Alignment(v * 2 - 1, 0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: AbkRadius.brXs),
+                  child: Text(_fmt(widget.duration * v),
+                      style: context.type.metadata.copyWith(color: Colors.white)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            LayoutBuilder(builder: (ctx, box) {
+              final w = box.maxWidth;
+              final h = active ? 6.0 : 3.0;
+              final thumbR = active ? 9.0 : 6.0;
+              return SizedBox(
+                height: 20,
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                        height: h,
+                        decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(h))),
+                    FractionallySizedBox(
+                      widthFactor: v.clamp(0.0, 1.0),
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                          height: h,
+                          decoration: BoxDecoration(
+                              color: c.accentPrimary,
+                              borderRadius: BorderRadius.circular(h))),
+                    ),
+                    Positioned(
+                      left: (v * w - thumbR).clamp(0.0, (w - 2 * thumbR).clamp(0.0, w)),
+                      child: Container(
+                        width: thumbR * 2,
+                        height: thumbR * 2,
+                        decoration: BoxDecoration(
+                          color: c.accentPrimary,
+                          shape: BoxShape.circle,
+                          border: active
+                              ? Border.all(color: Colors.white, width: 2)
+                              : null,
+                          boxShadow: _focused ? AbkElevation.focus : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ]),
         ),
       ),
     );

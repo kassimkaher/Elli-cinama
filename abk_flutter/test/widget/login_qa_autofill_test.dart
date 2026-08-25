@@ -1,4 +1,5 @@
 import 'package:abk_player/core/config/qa_config.dart';
+import 'package:abk_player/core/design/breakpoints.dart';
 import 'package:abk_player/core/design/theme.dart';
 import 'package:abk_player/core/di/providers.dart';
 import 'package:abk_player/core/i18n/strings.dart';
@@ -66,6 +67,45 @@ List<EditableText> _edits(WidgetTester t) => t.widgetList<EditableText>(find.byT
 
 void main() {
   const key = Key('qa_autofill');
+
+  testWidgets('TV projector (960×540, dpr2): login fits, no clip, QA fills via display', (t) async {
+    AbkBreakpoints.isTv = true;
+    addTearDown(() => AbkBreakpoints.isTv = false);
+    t.view.devicePixelRatio = 2.0; // Nebula projector: density 320
+    t.view.physicalSize = const Size(1920, 1080); // → logical 960×540
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
+
+    final s = _FakeSession();
+    await t.pumpWidget(_harness(s, qa: const QaCredentials('qa_user', 'qa_pass')));
+    await t.pump();
+
+    // No RenderFlex overflow at the low TV height (form scrolls instead).
+    expect(t.takeException(), isNull);
+
+    // Every login control exists and is reachable (the scroll view holds them).
+    expect(find.byKey(const Key('login_user')), findsOneWidget);
+    expect(find.byKey(const Key('login_pass')), findsOneWidget);
+    expect(find.byKey(const Key('login_submit')), findsOneWidget);
+    expect(find.byKey(key), findsOneWidget);
+
+    // The QA card is reachable (below the fold) via the scroll view, and
+    // activating it fills the fields without auto-submitting.
+    await t.ensureVisible(find.byKey(key));
+    await t.tap(find.byKey(key));
+    await t.pump();
+    expect(s.loginCalls, 0, reason: 'QA autofill must not sign in');
+
+    // Filled values reach login: pressing Login submits the QA credentials.
+    await t.ensureVisible(find.byKey(const Key('login_submit')));
+    await t.tap(find.byKey(const Key('login_submit')));
+    await t.pump();
+    expect(s.loginCalls, 1);
+    expect(s.lastUser, 'qa_user');
+    expect(s.lastPass, 'qa_pass');
+  });
 
   testWidgets('QA card is hidden in production configuration (no QA creds)', (t) async {
     await t.pumpWidget(_harness(_FakeSession(), qa: null));

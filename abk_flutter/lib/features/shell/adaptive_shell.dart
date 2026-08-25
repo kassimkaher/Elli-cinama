@@ -78,7 +78,10 @@ class AdaptiveShell extends ConsumerWidget {
           }),
         },
         child: Focus(
-          autofocus: true,
+          // On TV the selected sidebar item autofocuses (visible first-frame
+          // focus); elsewhere this wrapper holds focus so number/'/' shortcuts
+          // work before the user touches anything.
+          autofocus: !AbkBreakpoints.isTv,
           child: AbkBreakpoints.usesSidebar(wc)
               ? _DesktopScaffold(index: index, onSelect: select, onSearch: () => _openSearch(context), body: body)
               : _PhoneScaffold(index: index, onSelect: select, onSearch: () => _openSearch(context), body: body),
@@ -202,10 +205,22 @@ class _DesktopScaffold extends StatelessWidget {
               Expanded(
                 child: ListView(padding: const EdgeInsets.symmetric(horizontal: 8), children: [
                   for (var i = 0; i < 5; i++)
-                    _SidebarItem(dest: _destinations[i], selected: index == i, labelled: labelled, onTap: () => onSelect(i)),
+                    _SidebarItem(
+                        dest: _destinations[i],
+                        selected: index == i,
+                        labelled: labelled,
+                        // TV: land a VISIBLE initial focus on the current tab so
+                        // the first frame shows focus without a remote key press.
+                        autofocus: AbkBreakpoints.isTv && index == i,
+                        onTap: () => onSelect(i)),
                 ]),
               ),
-              _SidebarItem(dest: _destinations[5], selected: index == 5, labelled: labelled, onTap: () => onSelect(5)),
+              _SidebarItem(
+                  dest: _destinations[5],
+                  selected: index == 5,
+                  labelled: labelled,
+                  autofocus: AbkBreakpoints.isTv && index == 5,
+                  onTap: () => onSelect(5)),
               const SizedBox(height: AbkSpace.s16),
             ]),
           ),
@@ -271,9 +286,14 @@ class _SidebarSearch extends StatelessWidget {
 
 class _SidebarItem extends StatelessWidget {
   final _Dest dest;
-  final bool selected, labelled;
+  final bool selected, labelled, autofocus;
   final VoidCallback onTap;
-  const _SidebarItem({required this.dest, required this.selected, required this.labelled, required this.onTap});
+  const _SidebarItem(
+      {required this.dest,
+      required this.selected,
+      required this.labelled,
+      required this.onTap,
+      this.autofocus = false});
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -282,6 +302,7 @@ class _SidebarItem extends StatelessWidget {
       child: AbkFocusable(
         onTap: onTap,
         selected: selected,
+        autofocus: autofocus,
         radius: AbkRadius.brSm,
         semanticLabel: context.tr(dest.labelKey),
         builder: (ctx, states) {

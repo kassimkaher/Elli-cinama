@@ -20,12 +20,14 @@ class AbkStrings {
     'account': {'ar': 'الحساب', 'en': 'Account'},
     // actions
     'play': {'ar': 'تشغيل', 'en': 'Play'},
+    'pause': {'ar': 'إيقاف مؤقت', 'en': 'Pause'},
     'details': {'ar': 'التفاصيل', 'en': 'Details'},
     'retry': {'ar': 'إعادة المحاولة', 'en': 'Retry'},
     'back': {'ar': 'رجوع', 'en': 'Back'},
     'cancel': {'ar': 'إلغاء', 'en': 'Cancel'},
     'ok': {'ar': 'موافق', 'en': 'OK'},
     'fullscreen': {'ar': 'ملء الشاشة', 'en': 'Fullscreen'},
+    'exitFullscreen': {'ar': 'إنهاء ملء الشاشة', 'en': 'Exit fullscreen'},
     // launch
     'preparingLibrary': {'ar': 'جارٍ تحضير المكتبة…', 'en': 'Preparing your library…'},
     'configFallback': {'ar': 'إعداد احتياطي', 'en': 'Using saved setup'},
@@ -127,6 +129,7 @@ class AbkStrings {
     'offline': {'ar': 'لا يوجد اتصال', 'en': 'You\'re offline'},
     'staleData': {'ar': 'محتوى محفوظ', 'en': 'Showing saved content'},
     'loading': {'ar': 'جارٍ التحميل…', 'en': 'Loading…'},
+    'unavailable': {'ar': 'غير متاح', 'en': 'Unavailable'},
     'title': {'ar': 'العنوان', 'en': 'Title'},
   };
 
