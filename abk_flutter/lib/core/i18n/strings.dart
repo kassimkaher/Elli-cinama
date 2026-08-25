@@ -102,6 +102,9 @@ class AbkStrings {
     'expires': {'ar': 'ينتهي في', 'en': 'Expires'},
     'clearCache': {'ar': 'مسح التخزين المؤقت', 'en': 'Clear cache'},
     'cacheCleared': {'ar': 'تم تحديث المحتوى', 'en': 'Content refreshed'},
+    // dev/QA-only
+    'qaAccount': {'ar': 'حساب الاختبار', 'en': 'QA account'},
+    'qaFillHint': {'ar': 'اضغط لتعبئة بيانات الاختبار', 'en': 'Tap to fill test credentials'},
     // parental
     'enterPin': {'ar': 'أدخل رمز القفل', 'en': 'Enter PIN'},
     'setPin': {'ar': 'تعيين رمز القفل', 'en': 'Set PIN'},

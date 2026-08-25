@@ -7,6 +7,7 @@ import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../core/i18n/strings.dart';
 import '../../shared/state/states.dart';
+import '../../shared/widgets/brand.dart';
 import '../auth/presentation/auth_controller.dart';
 import '../../core/di/providers.dart';
 import '../favorites/favorites_screen.dart';
@@ -219,13 +220,7 @@ class _Brand extends StatelessWidget {
   const _Brand({required this.labelled});
   @override
   Widget build(BuildContext context) {
-    final c = context.c;
-    final mark = Container(
-      width: 34, height: 34,
-      decoration: BoxDecoration(color: c.accentPrimary, borderRadius: AbkRadius.brSm),
-      alignment: Alignment.center,
-      child: Text('A', style: context.type.sectionTitle.copyWith(color: c.background, fontWeight: FontWeight.w700)),
-    );
+    const mark = AbkLogo.chip(size: 34);
     if (!labelled) return mark;
     return Row(children: [
       const SizedBox(width: 12),

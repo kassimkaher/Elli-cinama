@@ -5,8 +5,10 @@ import '../../../core/design/breakpoints.dart';
 import '../../../core/design/theme.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/i18n/strings.dart';
+import '../../../shared/widgets/brand.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/images.dart';
+import '../../../core/config/qa_config.dart';
 import '../../../core/di/providers.dart';
 import 'auth_controller.dart';
 
@@ -55,9 +57,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       Container(color: context.c.surface),
                       const Positioned.fill(child: BackdropScrim(heightFactor: 1)),
                       Center(
-                        child: Text('ABK',
-                            style: context.type.hero.copyWith(
-                                color: context.c.accentPrimary, fontSize: 72)),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          const AbkLogo.mark(size: 104),
+                          const SizedBox(height: AbkSpace.s20),
+                          Text('ABK',
+                              style: context.type.hero.copyWith(
+                                  color: context.c.textPrimary, letterSpacing: 6)),
+                        ]),
                       ),
                     ]),
                   ),
@@ -81,18 +87,14 @@ class _Form extends ConsumerWidget {
     final auth = ref.watch(sessionControllerProvider);
     final authing = auth is AuthAuthenticating;
     final error = auth is AuthError ? auth : null;
+    final qa = ref.watch(qaCredentialsProvider);
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 380),
       child: Padding(
         padding: const EdgeInsets.all(AbkSpace.s24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(color: c.accentPrimary, borderRadius: AbkRadius.brSm),
-            alignment: Alignment.center,
-            child: Text('A', style: context.type.pageTitle.copyWith(color: c.background)),
-          ),
+          const AbkLogo.chip(size: 48),
           const SizedBox(height: AbkSpace.s24),
           Text(context.tr('loginTitle'), style: context.type.pageTitle),
           const SizedBox(height: AbkSpace.s4),
@@ -132,7 +134,62 @@ class _Form extends ConsumerWidget {
             expand: true,
             onPressed: authing ? null : onSubmit,
           ),
+          if (qa != null) ...[
+            const SizedBox(height: AbkSpace.s16),
+            _QaAutofillCard(
+              enabled: !authing,
+              onTap: () {
+                user.text = qa.username;
+                pass.text = qa.password;
+              },
+            ),
+          ],
         ]),
+      ),
+    );
+  }
+}
+
+/// Dev/QA-only autofill convenience. Fills the username/password fields with the
+/// authorized test account (from --dart-define); it never submits, validates, or
+/// bypasses auth — the user still presses Login. Rendered only when QA
+/// credentials are configured, so it is absent from production/release builds.
+class _QaAutofillCard extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool enabled;
+  const _QaAutofillCard({required this.onTap, this.enabled = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('qa_autofill'),
+          onTap: enabled ? onTap : null,
+          borderRadius: AbkRadius.brSm,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: AbkSpace.s12, vertical: AbkSpace.s12),
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: AbkRadius.brSm,
+              border: Border.all(color: c.borderSubtle),
+            ),
+            child: Row(children: [
+              Icon(Icons.science_outlined, size: 18, color: c.accentPrimary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(context.tr('qaAccount'), style: context.type.caption.copyWith(color: c.textPrimary)),
+                  Text(context.tr('qaFillHint'), style: context.type.metadata.copyWith(color: c.textMuted)),
+                ]),
+              ),
+              Icon(Icons.bolt_rounded, size: 16, color: c.textMuted),
+            ]),
+          ),
+        ),
       ),
     );
   }

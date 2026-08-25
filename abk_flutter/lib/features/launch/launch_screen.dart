@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import '../../core/i18n/strings.dart';
+import '../../shared/widgets/brand.dart';
 import '../catalogue/catalogue_providers.dart';
 import '../settings/settings_screen.dart';
 
@@ -46,13 +47,7 @@ class _LaunchScreenState extends ConsumerState<LaunchScreen> {
           backgroundColor: c.background,
           body: Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 64, height: 64,
-                decoration: BoxDecoration(color: c.accentPrimary, borderRadius: AbkRadius.brMd),
-                alignment: Alignment.center,
-                child: Text('A',
-                    style: context.type.hero.copyWith(color: c.background, fontWeight: FontWeight.w700)),
-              ),
+              const AbkLogo.chip(size: 64),
               const SizedBox(height: AbkSpace.s16),
               Text('ABK', style: context.type.sectionTitle),
               const SizedBox(height: AbkSpace.s32),
