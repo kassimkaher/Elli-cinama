@@ -69,15 +69,16 @@ class AbkTextStyles {
     );
   }
 
-  TextStyle get hero => _s([34, 44, 52, 68], [36, 46, 54, 72], weight: FontWeight.w700, display: true);
-  TextStyle get pageTitle => _s([26, 30, 34, 44], [32, 38, 42, 52], weight: FontWeight.w700, display: true);
-  TextStyle get sectionTitle => _s([18, 20, 22, 30], [24, 26, 28, 38], weight: FontWeight.w600, display: true);
-  TextStyle get cardTitle => _s([14, 15, 15, 24], [19, 20, 20, 30], weight: FontWeight.w600);
-  TextStyle get body => _s([15, 15, 16, 24], [24, 25, 26, 36], weight: FontWeight.w400);
+  // TV tier (index 3) reset to streaming-TV density (was 68/44/30/24/20/26).
+  TextStyle get hero => _s([34, 44, 52, 40], [36, 46, 54, 46], weight: FontWeight.w700, display: true);
+  TextStyle get pageTitle => _s([26, 30, 34, 32], [32, 38, 42, 40], weight: FontWeight.w700, display: true);
+  TextStyle get sectionTitle => _s([18, 20, 22, 20], [24, 26, 28, 26], weight: FontWeight.w600, display: true);
+  TextStyle get cardTitle => _s([14, 15, 15, 16], [19, 20, 20, 21], weight: FontWeight.w600);
+  TextStyle get body => _s([15, 15, 16, 18], [24, 25, 26, 26], weight: FontWeight.w400);
   TextStyle get bodySecondary => body.copyWith(color: muted);
-  TextStyle get metadata => _s([12, 12, 13, 20], [16, 17, 18, 26], weight: FontWeight.w500, mono: true, c: muted);
-  TextStyle get caption => _s([12, 12, 13, 20], [17, 17, 18, 26], weight: FontWeight.w400, c: muted);
-  TextStyle get button => _s([15, 15, 14, 26], [20, 20, 19, 32], weight: FontWeight.w600);
+  TextStyle get metadata => _s([12, 12, 13, 13], [16, 17, 18, 18], weight: FontWeight.w500, mono: true, c: muted);
+  TextStyle get caption => _s([12, 12, 13, 14], [17, 17, 18, 19], weight: FontWeight.w400, c: muted);
+  TextStyle get button => _s([15, 15, 14, 16], [20, 20, 19, 20], weight: FontWeight.w600);
   TextStyle get playerControl => _s([13, 14, 14, 22], [17, 18, 18, 28], weight: FontWeight.w500, mono: true);
   TextStyle get navLabel => _s([11, 12, 13, 20], [14, 15, 16, 24],
       weight: FontWeight.w600, tracking: arabic ? 0 : 0.6);

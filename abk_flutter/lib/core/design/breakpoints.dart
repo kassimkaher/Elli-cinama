@@ -47,7 +47,7 @@ class AbkBreakpoints {
         WidthClass.expanded => 32,
         WidthClass.desktop => 40,
         WidthClass.wideDesktop => 40,
-        WidthClass.tv => 64,
+        WidthClass.tv => 40, // 10-foot density: reclaim width for more cards/row
       };
 
   static double gridGap(WidthClass c) => switch (c) {
@@ -56,7 +56,7 @@ class AbkBreakpoints {
         WidthClass.expanded => 16,
         WidthClass.desktop => 20,
         WidthClass.wideDesktop => 20,
-        WidthClass.tv => 24,
+        WidthClass.tv => 16,
       };
 
   static double sectionGap(WidthClass c) => switch (c) {
@@ -65,7 +65,7 @@ class AbkBreakpoints {
         WidthClass.expanded => 40,
         WidthClass.desktop => 48,
         WidthClass.wideDesktop => 48,
-        WidthClass.tv => 56,
+        WidthClass.tv => 36,
       };
 
   static double posterWidth(WidthClass c) => switch (c) {
@@ -74,7 +74,8 @@ class AbkBreakpoints {
         WidthClass.expanded => 150,
         WidthClass.desktop => 164,
         WidthClass.wideDesktop => 164,
-        WidthClass.tv => 228,
+        // Streaming-TV thumbnail: ~5-6 posters/row at 960, ~8 at 1280.
+        WidthClass.tv => 124,
       };
 
   static int posterColumns(WidthClass c) => switch (c) {

@@ -65,7 +65,7 @@ class _Hero extends ConsumerWidget {
     return featured.when(
       loading: () => AbkBreakpoints.isTv
           ? SizedBox(
-              height: (MediaQuery.sizeOf(context).height * 0.52).clamp(240.0, 480.0),
+              height: (MediaQuery.sizeOf(context).height * 0.42).clamp(220.0, 400.0),
               child: const SkeletonBox(radius: AbkRadius.brLg))
           : const AspectRatio(
               aspectRatio: AbkAspect.backdrop, child: SkeletonBox(radius: AbkRadius.brLg)),
@@ -99,14 +99,14 @@ class _ContinueWatching extends ConsumerWidget {
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SectionHeader(context.tr('continueWatching')),
               PosterRail(
-                height: AbkBreakpoints.isTv ? 250 : 180,
+                height: AbkBreakpoints.isTv ? 188 : 180,
                 itemCount: list.length,
                 itemBuilder: (ctx, i) => ContinueWatchingCard(
                   title: list[i].title,
                   subtitle: list[i].subtitle,
                   imageUrl: list[i].image,
                   progress: list[i].progress,
-                  width: AbkBreakpoints.isTv ? 340 : 260,
+                  width: AbkBreakpoints.isTv ? 240 : 260,
                   onTap: () => _resumeEntry(ctx, ref, list[i]),
                 ),
               ),
@@ -245,10 +245,10 @@ class _FavoriteChannels extends ConsumerWidget {
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SectionHeader(context.tr('myFavoriteChannels')),
               PosterRail(
-                height: AbkBreakpoints.isTv ? 132 : 92,
+                height: AbkBreakpoints.isTv ? 100 : 92,
                 itemCount: list.length,
                 itemBuilder: (ctx, i) => SizedBox(
-                  width: AbkBreakpoints.isTv ? 132 : 92,
+                  width: AbkBreakpoints.isTv ? 100 : 92,
                   child: GestureDetector(
                     onTap: () => playChannel(ctx, ref, list[i]),
                     child: Container(
@@ -275,10 +275,10 @@ class _MoviesRail extends ConsumerWidget {
       onMore: () => ref.read(shellIndexProvider.notifier).state = 2,
       child: SectionAsync(
         value: movies.whenData((l) => l.take(18).toList()),
-        skeleton: _railSkeleton(height: AbkBreakpoints.isTv ? 420 : 230),
+        skeleton: _railSkeleton(height: AbkBreakpoints.isTv ? 232 : 230),
         onRetry: () => ref.invalidate(moviesProvider),
         data: (list) => PosterRail(
-          height: AbkBreakpoints.isTv ? 420 : 230,
+          height: AbkBreakpoints.isTv ? 232 : 230,
           itemCount: list.length,
           itemBuilder: (ctx, i) => PosterCard(
             title: list[i].name, imageUrl: list[i].icon, rating: list[i].rating,
@@ -300,10 +300,10 @@ class _SeriesRail extends ConsumerWidget {
       onMore: () => ref.read(shellIndexProvider.notifier).state = 3,
       child: SectionAsync(
         value: series.whenData((l) => l.take(18).toList()),
-        skeleton: _railSkeleton(height: AbkBreakpoints.isTv ? 420 : 230),
+        skeleton: _railSkeleton(height: AbkBreakpoints.isTv ? 232 : 230),
         onRetry: () => ref.invalidate(seriesListProvider),
         data: (list) => PosterRail(
-          height: AbkBreakpoints.isTv ? 420 : 230,
+          height: AbkBreakpoints.isTv ? 232 : 230,
           itemCount: list.length,
           itemBuilder: (ctx, i) => PosterCard(
             title: list[i].title, imageUrl: list[i].icon, rating: list[i].rating,
@@ -325,13 +325,13 @@ class _LiveCategories extends ConsumerWidget {
       onMore: () => ref.read(shellIndexProvider.notifier).state = 1,
       child: SectionAsync(
         value: cats.whenData((l) => l.where((c) => c.id != '-1').take(12).toList()),
-        skeleton: _railSkeleton(height: AbkBreakpoints.isTv ? 160 : 110),
+        skeleton: _railSkeleton(height: AbkBreakpoints.isTv ? 128 : 110),
         onRetry: () => ref.invalidate(liveCategoriesProvider),
         data: (list) => PosterRail(
-          height: AbkBreakpoints.isTv ? 160 : 110,
+          height: AbkBreakpoints.isTv ? 128 : 110,
           itemCount: list.length,
           itemBuilder: (ctx, i) => SizedBox(
-            width: AbkBreakpoints.isTv ? 230 : 170,
+            width: AbkBreakpoints.isTv ? 184 : 170,
             child: CategoryTile(
               name: list[i].name, count: list[i].channelCount,
               onTap: () => ref.read(shellIndexProvider.notifier).state = 1,

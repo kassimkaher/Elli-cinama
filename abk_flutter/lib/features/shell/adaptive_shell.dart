@@ -188,8 +188,10 @@ class _DesktopScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final labelled = MediaQuery.sizeOf(context).width >= AbkBreakpoints.desktop;
-    // Wider rail on TV to hold the larger 10-foot typography.
-    final width = labelled ? (AbkBreakpoints.isTv ? 320.0 : 232.0) : 72.0;
+    // TV: below the desktop width the rail is a compact icon column (72); when
+    // labels do appear (very wide TVs) keep it to 220, not a 320 column that
+    // steals width from content.
+    final width = labelled ? (AbkBreakpoints.isTv ? 220.0 : 232.0) : 72.0;
     return Scaffold(
       body: Row(children: [
         Container(

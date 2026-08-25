@@ -96,6 +96,25 @@ QA target this iteration = **Android TV emulator** (`abk_google_tv`, leanback, l
 
 **Windows true-fullscreen (addendum §12): NOT YET DONE** — needs desktop window management (title-bar/chrome hidden, display fully occupied). No Windows host attached to the agent; recommended approach is the `window_manager` package (or native `NSWindow.toggleFullScreen` / Win32) driven by the existing `_fullscreen` toggle, preserving the same playback session. Deferred to a focused desktop follow-up (macOS verifiable locally, Windows needs a host).
 
+## Production-grade density reset (TV emulator QA)
+
+Owner rejected TV Home/Login/Live as "scaled-up desktop." Reset the TV density from first principles (TV = type-ramp index 3 ONLY; desktop is index 2, untouched):
+
+- **Type ramp (TV):** hero 68→40, pageTitle 44→32, sectionTitle 30→20, cardTitle 24→16, body 24→18, metadata 20→13, caption 20→14, button 26→16.
+- **Tokens (TV):** posterWidth 228→**124**, gridGap 24→**16**, contentMargin 64→**40**, sectionGap 56→**36**.
+- **Home:** Movies/Series rail 420→**232**; Continue 340×250→**240×188**; Favorites 132→**100**; Live categories 230×160→**184×128**; hero cap 52%→**42%** (clamp 220–400); poster play-chip 26→15; hero buttons pad 18/11→14/9, gap 12→10.
+- **Nav rail:** TV labelled width 320→**220** (icon-only 72 below desktop width) — no longer balloons and steals content width.
+
+| Screen | Before | After |
+|---|---|---|
+| Home posters/row @960 | ~3 (starved-large) | **~6** (streaming-TV thumbnails) |
+| Home hero | ~half+ screen, giant year | compact ~42%, year = small caption |
+| Home section titles / buttons | oversized | 20 dp / compact |
+| Live list | dense (prior iter) | denser, ~10 ch + ~9 cats |
+| Login | fit, but large | fit, tighter (title 20, fields 20 dp) |
+
+Verified on the `abk_google_tv` emulator (960×540): Home now shows 6 posters/row with a compact hero (the "before/after" is dramatic — 3→6 cards, giant→small year). `flutter analyze` clean · **107 tests** pass.
+
 ## Status
 
 - REAL TV LOGIN: **CLOSED**

@@ -88,10 +88,10 @@ class PosterCard extends StatelessWidget {
                         bottom: 8, left: 8, right: 8,
                         child: Row(children: [
                           Container(
-                            padding: EdgeInsets.all(AbkBreakpoints.isTv ? 8 : 6),
+                            padding: const EdgeInsets.all(5),
                             decoration: BoxDecoration(color: c.accentPrimary, shape: BoxShape.circle),
                             child: Icon(Icons.play_arrow_rounded,
-                                size: AbkBreakpoints.isTv ? 26 : 18, color: c.background),
+                                size: AbkBreakpoints.isTv ? 15 : 18, color: c.background),
                           ),
                         ]),
                       ),
@@ -498,7 +498,7 @@ class HeroBanner extends StatelessWidget {
                   if (onPlay != null)
                     _HeroBtn(icon: Icons.play_arrow_rounded, label: playLabel, filled: true, onTap: onPlay!),
                   if (onDetails != null) ...[
-                    const SizedBox(width: 12),
+                    SizedBox(width: AbkBreakpoints.isTv ? 10 : 12),
                     _HeroBtn(icon: Icons.info_outline_rounded, label: detailsLabel, filled: false, onTap: onDetails!),
                   ],
                 ]),
@@ -511,7 +511,7 @@ class HeroBanner extends StatelessWidget {
     // invites D-pad-down; the backdrop covers the shorter box.
     final sized = AbkBreakpoints.isTv
         ? SizedBox(
-            height: (MediaQuery.sizeOf(context).height * 0.52).clamp(240.0, 480.0),
+            height: (MediaQuery.sizeOf(context).height * 0.42).clamp(220.0, 400.0),
             child: content)
         : AspectRatio(aspectRatio: AbkAspect.backdrop, child: content);
     return ClipRRect(borderRadius: AbkRadius.brLg, child: sized);
@@ -532,13 +532,15 @@ class _HeroBtn extends StatelessWidget {
       radius: AbkRadius.brSm,
       semanticLabel: label,
       builder: (ctx, s) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        padding: EdgeInsets.symmetric(
+            horizontal: AbkBreakpoints.isTv ? 14 : 18,
+            vertical: AbkBreakpoints.isTv ? 9 : 11),
         decoration: BoxDecoration(
           color: filled ? c.accentPrimary : Colors.white.withValues(alpha: 0.16),
           borderRadius: AbkRadius.brSm,
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 18, color: filled ? c.background : Colors.white),
+          Icon(icon, size: AbkBreakpoints.isTv ? 16 : 18, color: filled ? c.background : Colors.white),
           const SizedBox(width: 8),
           Text(label, style: context.type.button.copyWith(color: filled ? c.background : Colors.white)),
         ]),
