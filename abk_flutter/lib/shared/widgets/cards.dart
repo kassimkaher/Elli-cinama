@@ -234,7 +234,7 @@ class CategoryRailItem extends StatelessWidget {
       selected: selected,
       semanticLabel: name,
       builder: (ctx, states) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: AbkBreakpoints.isTv ? 8 : 10),
         decoration: BoxDecoration(
           color: selected
               ? c.surfaceStrong
@@ -247,7 +247,9 @@ class CategoryRailItem extends StatelessWidget {
           Expanded(
             child: Text(name,
                 maxLines: 1, overflow: TextOverflow.ellipsis,
+                // Denser TV category font so long names truncate less.
                 style: context.type.body.copyWith(
+                    fontSize: AbkBreakpoints.isTv ? 20 : null,
                     color: selected ? c.textPrimary : c.textSecondary,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
           ),
@@ -361,7 +363,7 @@ class LiveChannelRow extends StatelessWidget {
       selected: selected,
       semanticLabel: name,
       builder: (ctx, states) => Container(
-        height: 64,
+        height: AbkBreakpoints.isTv ? 56 : 64,
         padding: const EdgeInsets.only(right: 10, left: 10),
         decoration: BoxDecoration(
           color: channelError
@@ -384,7 +386,7 @@ class LiveChannelRow extends StatelessWidget {
           const SizedBox(width: 8),
           Stack(alignment: Alignment.center, children: [
             Container(
-              width: 44, height: 44,
+              width: AbkBreakpoints.isTv ? 40 : 44, height: AbkBreakpoints.isTv ? 40 : 44,
               decoration: BoxDecoration(color: c.surfaceStrong, borderRadius: AbkRadius.brSm),
               clipBehavior: Clip.antiAlias,
               padding: const EdgeInsets.all(6),
@@ -396,7 +398,7 @@ class LiveChannelRow extends StatelessWidget {
             // error glyph — makes the actively-decoding channel unmistakable.
             if (loading)
               Container(
-                width: 44, height: 44,
+                width: AbkBreakpoints.isTv ? 40 : 44, height: AbkBreakpoints.isTv ? 40 : 44,
                 decoration: BoxDecoration(color: c.scrim, borderRadius: AbkRadius.brSm),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -407,7 +409,7 @@ class LiveChannelRow extends StatelessWidget {
               Icon(Icons.error_outline_rounded, size: 22, color: c.error)
             else if (playing)
               Container(
-                width: 44, height: 44,
+                width: AbkBreakpoints.isTv ? 40 : 44, height: AbkBreakpoints.isTv ? 40 : 44,
                 decoration: BoxDecoration(
                     color: c.accentPrimary.withValues(alpha: 0.28), borderRadius: AbkRadius.brSm),
                 child: Icon(Icons.graphic_eq_rounded, size: 22, color: c.accentPrimary),
@@ -425,7 +427,10 @@ class LiveChannelRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: context.type.cardTitle.copyWith(
-                              color: playing ? c.accentPrimary : null))),
+                              color: playing ? c.accentPrimary : null,
+                              // Denser TV list: smaller name so more of it shows
+                              // before ellipsis (still legible from the couch).
+                              fontSize: AbkBreakpoints.isTv ? 19 : null))),
                   if (playing) ...[const SizedBox(width: 8), const LiveBadge()]
                   else if (live) ...[const SizedBox(width: 8), const LiveBadge()],
                   if (archive) ...[const SizedBox(width: 6), const ArchiveBadge()],

@@ -258,6 +258,31 @@ void main() {
     expect(_controlsOpacity(t), 1, reason: 'controls do not hide while being navigated');
   });
 
+  testWidgets('TV: focus memory — auto-hide then re-show RESTORES the last control', (t) async {
+    await tvSurface(t);
+    final svc = FakeService();
+    await t.pumpWidget(_app(svc, [_ep('a')]));
+    await _settle(t);
+
+    // Move focus to a NON-default control (the timeline), not Play/Pause.
+    _timelineNode(t).requestFocus();
+    await t.pump();
+    expect(_timelineNode(t).hasFocus, isTrue);
+
+    // Idle past the auto-hide window → controls hide (focus remembered).
+    await t.pump(const Duration(seconds: 5));
+    await t.pump();
+    expect(_controlsOpacity(t), 0);
+
+    // Re-reveal → focus must RESTORE to the timeline, not reset to Play/Pause.
+    await t.sendKeyEvent(LogicalKeyboardKey.select);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 50));
+    expect(_controlsOpacity(t), 1);
+    expect(_timelineNode(t).hasFocus, isTrue,
+        reason: 'last-focused control (timeline) is restored, not reset to Play/Pause');
+  });
+
   testWidgets('non-TV regression: centre transport + drag Slider, no TV timeline', (t) async {
     AbkBreakpoints.isTv = false;
     final svc = FakeService();

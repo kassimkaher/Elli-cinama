@@ -81,6 +81,21 @@ Same `isDesktopClass` large-screen layout path (sidebar, adaptive Live/Home widt
 
 `flutter analyze` clean · `flutter test` **106 passed** (1 skipped live-backend), incl. new `large_screen_test.dart` (login height/first-focus, LiveChannelRow states, ScrollFocusStop) and `tv_player_focus_test.dart`. Phone bottom-bar + touch player (double-tap seek, drag scrub) unaffected (all TV/large-screen changes gate on `isTv`/`isDesktopClass`).
 
+## Addendum iteration — density, Live/VOD remote split, focus memory (TV emulator QA)
+
+QA target this iteration = **Android TV emulator** (`abk_google_tv`, leanback, logical 960×540). Projector reserved for owner QA.
+
+| Area | Result |
+|---|---|
+| **TV login density** — full form (logo, title, username, password, Login, QA card) fits ONE viewport, **no scroll** | **PASS** (emulator). Compact: logo 32, title→sectionTitle, field value 20 dp / minHeight 40 / pad 6, button pad 10, gaps s8, QA card pad s8, form maxWidth 400 |
+| **Live list density** — smaller text, more rows, less truncation | **PASS** (emulator: ~10 channels visible). Channel name 19 dp, row 56, logo 40; category 20 dp, row pad 8; cols cat 200/232, ch clamp(W·0.28,248,340), preview still dominant (≥51%) |
+| **Live remote = DIRECT (fullscreen only)** — OK=play/pause, UP/DOWN=prev/next channel, LEFT/RIGHT=media volume (native `AudioManager` channel `abk/tv`); embedded 3-pane keeps list navigation | implemented; direct handler intercepts before traversal; **projector owner QA for rapid switching** |
+| **VOD player = focus-based**, unchanged | retained |
+| **Player focus memory** — auto-hide then re-show RESTORES the last-focused control (not reset to Play/Pause); falls back to Play/Pause only if it's gone / first show | **PASS** (unit test `focus memory — auto-hide then re-show RESTORES the last control`) |
+| Regression | `flutter analyze` clean · **107 tests** pass (added focus-memory test) |
+
+**Windows true-fullscreen (addendum §12): NOT YET DONE** — needs desktop window management (title-bar/chrome hidden, display fully occupied). No Windows host attached to the agent; recommended approach is the `window_manager` package (or native `NSWindow.toggleFullScreen` / Win32) driven by the existing `_fullscreen` toggle, preserving the same playback session. Deferred to a focused desktop follow-up (macOS verifiable locally, Windows needs a host).
+
 ## Status
 
 - REAL TV LOGIN: **CLOSED**

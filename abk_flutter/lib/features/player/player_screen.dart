@@ -101,6 +101,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // True while the focusable progress bar is the focused control (the timeline
   // sub-mode), so BACK returns to the controls instead of hiding them.
   bool _timelineFocused = false;
+  // Player-session-local focus memory: the control focused just before an
+  // auto-hide, restored when controls re-appear (no reset to Play/Pause).
+  FocusNode? _lastFocusedControl;
 
   PlaybackItem get _item => widget.items[_i];
   bool get _seekable => !_item.live && _state.duration > Duration.zero;
@@ -289,11 +292,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _bumpControls() {
     final wasHidden = !_controls;
     setState(() => _controls = true);
-    // On TV, when the surface is (re)shown, land focus on Play/Pause so the
-    // remote user starts on a sensible control (never on nothing).
+    // On TV, when the surface is (re)shown, RESTORE the control the user was last
+    // on (focus memory) instead of resetting to Play/Pause — unless it no longer
+    // exists (then fall back to Play/Pause, e.g. first presentation).
     if (_tv && wasHidden) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _controls) _playPauseFocus.requestFocus();
+        if (!mounted || !_controls) return;
+        final last = _lastFocusedControl;
+        if (last != null && last.canRequestFocus && last.context != null) {
+          last.requestFocus();
+        } else {
+          _playPauseFocus.requestFocus();
+        }
       });
     }
     _restartHideTimer();
@@ -310,9 +320,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// Hide the control surface. On TV, park focus on the invisible root node so
-  /// the next D-pad press is caught and re-reveals the controls.
+  /// the next D-pad press is caught and re-reveals the controls — after
+  /// remembering the control the user was on so it can be restored.
   void _hideControls() {
     _hide?.cancel();
+    if (_tv) {
+      final pf = FocusManager.instance.primaryFocus;
+      if (pf != null && pf != _rootFocus && pf.context != null) {
+        _lastFocusedControl = pf;
+      }
+    }
     setState(() => _controls = false);
     if (_tv) _rootFocus.requestFocus();
   }

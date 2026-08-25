@@ -159,10 +159,10 @@ class _Form extends ConsumerWidget {
     // gone, so a small inline logo carries the brand and the subtitle is dropped.
     final gapLg = compact ? AbkSpace.s12 : (dense ? AbkSpace.s16 : AbkSpace.s24);
     final gapField = compact ? AbkSpace.s12 : AbkSpace.s16;
-    final logo = compact ? 40.0 : (dense ? 56.0 : 100.0);
+    final logo = compact ? 32.0 : (dense ? 56.0 : 100.0);
 
     return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: compact ? 440 : 380),
+      constraints: BoxConstraints(maxWidth: compact ? 400 : 380),
       child: Padding(
         padding: EdgeInsets.symmetric(
             horizontal: AbkSpace.s24, vertical: dense ? AbkSpace.s16 : AbkSpace.s24),
@@ -171,8 +171,10 @@ class _Form extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(child: AbkLogo.chip(size: logo)),
-            SizedBox(height: gapLg),
-            Text(context.tr('loginTitle'), style: context.type.pageTitle),
+            // Tighter logo→title gap on the compact TV form.
+            SizedBox(height: compact ? AbkSpace.s8 : gapLg),
+            Text(context.tr('loginTitle'),
+                style: compact ? context.type.sectionTitle : context.type.pageTitle),
             if (!compact) ...[
               const SizedBox(height: AbkSpace.s4),
               Text(context.tr('loginSubtitle'), style: context.type.bodySecondary),
@@ -216,12 +218,14 @@ class _Form extends ConsumerWidget {
               authing ? context.tr('signingIn') : context.tr('signIn'),
               loading: authing,
               expand: true,
+              dense: compact,
               onPressed: authing ? null : onSubmit,
             ),
             if (qa != null) ...[
-              SizedBox(height: gapField),
+              SizedBox(height: compact ? AbkSpace.s8 : gapField),
               _QaAutofillCard(
                 enabled: !authing,
+                dense: compact,
                 onTap: () {
                   user.text = qa.username;
                   pass.text = qa.password;
@@ -245,7 +249,8 @@ class _Form extends ConsumerWidget {
 class _QaAutofillCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool enabled;
-  const _QaAutofillCard({required this.onTap, this.enabled = true});
+  final bool dense;
+  const _QaAutofillCard({required this.onTap, this.enabled = true, this.dense = false});
 
   @override
   Widget build(BuildContext context) {
@@ -263,9 +268,9 @@ class _QaAutofillCard extends StatelessWidget {
         builder: (ctx, states) {
           final focused = states.contains(WidgetState.focused);
           return Container(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
               horizontal: AbkSpace.s12,
-              vertical: AbkSpace.s12,
+              vertical: dense ? AbkSpace.s8 : AbkSpace.s12,
             ),
             decoration: BoxDecoration(
               color: focused ? c.surfaceStrong : c.surface,

@@ -222,6 +222,9 @@ class _PreviewInfo {
 final _previewProvider =
     StateProvider<_PreviewInfo>((_) => const _PreviewInfo(null, _PreviewPhase.idle));
 
+/// Native bridge for direct media-volume control (Live TV LEFT/RIGHT).
+const MethodChannel _tvChannel = MethodChannel('abk/tv');
+
 /// Desktop/TV three-pane: categories · channels · REAL embedded preview player
 /// (Design §30). Selecting a channel plays its actual stream in the preview;
 /// fullscreen expands the SAME playback session (a layout toggle via a shared
@@ -271,8 +274,10 @@ class _ThreePaneState extends ConsumerState<_ThreePane> {
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth;
       // Compress the two lists, never the preview → preview stays dominant.
-      final catW = w < 1000 ? 184.0 : 220.0;
-      final chW = (w * 0.30).clamp(256.0, 360.0);
+      // Categories a touch wider (fewer truncated names); channels a touch
+      // narrower (the denser 19dp name fits in less width).
+      final catW = w < 1000 ? 200.0 : 232.0;
+      final chW = (w * 0.28).clamp(248.0, 340.0);
       return Row(children: [
         SizedBox(width: catW, child: _categories(context, categories, selCat)),
         Container(width: 1, color: c.divider),
@@ -805,6 +810,41 @@ class _LiveFullscreenScreenState extends ConsumerState<_LiveFullscreenScreen> {
     );
   }
 
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    if (!AbkBreakpoints.isTv) return KeyEventResult.ignored; // desktop: focus/click
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.select ||
+        k == LogicalKeyboardKey.gameButtonA ||
+        k == LogicalKeyboardKey.enter) {
+      _togglePlay();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowUp) {
+      _go(-1);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowDown) {
+      _go(1);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowLeft) {
+      _bump();
+      _adjustVolume(-1);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowRight) {
+      _bump();
+      _adjustVolume(1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored; // BACK etc. -> default route pop
+  }
+
+  void _adjustVolume(int dir) {
+    _tvChannel.invokeMethod<void>('adjustVolume', {'dir': dir}).catchError((_) {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -816,16 +856,11 @@ class _LiveFullscreenScreenState extends ConsumerState<_LiveFullscreenScreen> {
       body: Focus(
         focusNode: _focus,
         autofocus: true,
-        // Any key re-reveals the controls (then they auto-hide again).
-        onKeyEvent: (node, e) {
-          if (e is KeyDownEvent && !_controls) {
-            _bump();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _playFocus.requestFocus();
-            });
-          }
-          return KeyEventResult.ignored;
-        },
+        // LIVE_DIRECT_MODE (TV): arrows/OK are DIRECT actions, not control
+        // traversal — OK=play/pause, UP/DOWN=prev/next channel (fast switching),
+        // LEFT/RIGHT=media volume. BACK exits (default route pop). Off-TV
+        // (mouse/keyboard) the overlay buttons stay focusable/clickable.
+        onKeyEvent: _onKey,
         child: MouseRegion(
           onHover: (_) => _bump(),
           child: Stack(fit: StackFit.expand, children: [
@@ -837,7 +872,9 @@ class _LiveFullscreenScreenState extends ConsumerState<_LiveFullscreenScreen> {
               child: IgnorePointer(
                 ignoring: !_controls,
                 child: ExcludeFocus(
-                  excluding: !_controls,
+                  // On TV the root owns the keys (direct mode), so overlay
+                  // buttons are never D-pad focus targets (still mouse-clickable).
+                  excluding: !_controls || AbkBreakpoints.isTv,
                   child: Column(children: [
                     // Top: back + channel identity.
                     Container(

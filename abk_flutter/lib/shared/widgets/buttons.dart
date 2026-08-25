@@ -16,6 +16,7 @@ class AbkButton extends StatelessWidget {
   final bool loading;
   final bool expand;
   final bool autofocus;
+  final bool dense; // tighter vertical padding for height-constrained layouts
 
   const AbkButton(
     this.label, {
@@ -26,6 +27,7 @@ class AbkButton extends StatelessWidget {
     this.loading = false,
     this.expand = false,
     this.autofocus = false,
+    this.dense = false,
   });
 
   @override
@@ -56,7 +58,7 @@ class AbkButton extends StatelessWidget {
           return AnimatedContainer(
             duration: AbkMotion.fast,
             width: expand ? double.infinity : null,
-            padding: const EdgeInsets.symmetric(horizontal: AbkSpace.s20, vertical: 13),
+            padding: EdgeInsets.symmetric(horizontal: AbkSpace.s20, vertical: dense ? 10 : 13),
             decoration: BoxDecoration(
               color: hovered ? Color.alphaBlend(Colors.white.withValues(alpha: 0.06), bg) : bg,
               borderRadius: AbkRadius.brSm,
@@ -218,10 +220,10 @@ class _AbkTextFieldState extends State<AbkTextField> {
       builder: (ctx, states) {
         final focused = states.contains(WidgetState.focused);
         return Container(
-          constraints: BoxConstraints(minHeight: widget.dense ? 42 : 50),
+          constraints: BoxConstraints(minHeight: widget.dense ? 40 : 50),
           alignment: AlignmentDirectional.centerStart,
           padding:
-              EdgeInsets.symmetric(horizontal: 14, vertical: widget.dense ? 8 : 12),
+              EdgeInsets.symmetric(horizontal: 14, vertical: widget.dense ? 6 : 12),
           decoration: BoxDecoration(
             color: c.surfaceElevated,
             borderRadius: AbkRadius.brSm,
@@ -234,8 +236,10 @@ class _AbkTextFieldState extends State<AbkTextField> {
               child: Text(shown,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: context.type.body
-                      .copyWith(color: hasVal ? c.textPrimary : c.textMuted)),
+                  style: context.type.body.copyWith(
+                      color: hasVal ? c.textPrimary : c.textMuted,
+                      // Smaller, compact-form value text (still couch-legible).
+                      fontSize: widget.dense ? 20 : null)),
             ),
             if (widget.trailing != null) widget.trailing!,
           ]),
