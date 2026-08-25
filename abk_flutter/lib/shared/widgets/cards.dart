@@ -265,12 +265,21 @@ class EpisodeCard extends StatelessWidget {
   final String? thumbUrl;
   final double? progress;
   final VoidCallback? onTap;
-  const EpisodeCard({super.key, required this.title, required this.subtitle, this.thumbUrl, this.progress, this.onTap});
+  final bool autofocus;
+  const EpisodeCard(
+      {super.key,
+      required this.title,
+      required this.subtitle,
+      this.thumbUrl,
+      this.progress,
+      this.onTap,
+      this.autofocus = false});
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     return AbkFocusable(
       onTap: onTap,
+      autofocus: autofocus,
       radius: AbkRadius.brMd,
       semanticLabel: title,
       builder: (ctx, states) => Container(

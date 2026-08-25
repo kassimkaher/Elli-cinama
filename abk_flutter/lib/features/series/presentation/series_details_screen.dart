@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design/breakpoints.dart';
 import '../../../core/design/theme.dart';
 import '../../../core/design/tokens.dart';
 import '../../../core/i18n/strings.dart';
@@ -81,6 +82,9 @@ class SeriesDetailsScreen extends ConsumerWidget {
                                 title: '${e.episodeNum ?? ''}  ${e.episodeName ?? ''}'.trim(),
                                 subtitle: d.info?.title ?? series.title,
                                 thumbUrl: series.icon,
+                                // TV: land visible first-frame focus on the first
+                                // episode (matches Movie details autofocusing Play).
+                                autofocus: AbkBreakpoints.isTv && e == episodes.first,
                                 onTap: () => _playEpisode(context, ref, episodes, episodes.indexOf(e), d),
                               ),
                             )),
