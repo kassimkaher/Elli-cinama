@@ -68,7 +68,7 @@ Legend: **COMPLETE** · **PARTIAL** · **BLOCKED** · **NOT IN SCOPE**
 | **Platforms** | Android physical device | COMPLETE | See ANDROID_FINAL_QA.md |
 | | macOS | COMPLETE | See MACOS_FINAL_QA.md |
 | | iOS Simulator | COMPLETE | Remains closed (Phase 5); no regression |
-| | iOS physical device | DEFERRED | Separate physical-iPhone phase — see IOS_PHYSICAL_DEVICE_DEFERRED.md |
+| | iOS physical device | COMPLETE | **CLOSED** in the follow-on Physical iPhone phase — fvp adapter validated on iPhone 15 / iOS 26.5 (live+switch+movie+episode all `playing`); see docs/platform-qa/ios/IOS_PHYSICAL_DEVICE_QA_CLOSURE.md |
 | | Windows / Linux | NOT IN SCOPE | Intentionally deferred — see FINAL_PLATFORM_BACKLOG.md |
 
 ---

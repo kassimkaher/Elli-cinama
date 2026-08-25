@@ -29,6 +29,7 @@ dependencies:
   # Playback abstraction (ExoPlayer/AVPlayer backed)
   video_player: ^2.9.0
   fvp: ^0.38.1
+  path_provider: ^2.1.6
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -74,32 +74,58 @@ class VideoPlayerPlaybackService implements PlaybackService {
   Future<void> pause() async => _controller?.pause();
 
   @override
-  Future<void> stop() async {
+  Future<void> seek(Duration position) async {
     final c = _controller;
-    if (c != null) {
-      await c.pause();
-      await c.seekTo(Duration.zero);
-    }
-    _emit(PlaybackState.idle);
+    if (c == null || !c.value.isInitialized) return;
+    // Only seek within a known, non-zero duration (VOD). Live has no duration.
+    if (c.value.duration <= Duration.zero) return;
+    var target = position;
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > c.value.duration) target = c.value.duration;
+    await c.seekTo(target);
   }
 
   @override
-  Future<void> dispose() async {
+  Future<void> stop() async {
+    // Fully release: pause first (immediate silence), then dispose the
+    // controller so no audio leaks and no orphan decoder survives.
+    final c = _controller;
+    if (c != null) {
+      try {
+        await c.pause();
+      } catch (_) {}
+    }
     await _disposeController();
-    await _stateController.close();
+    _emit(PlaybackState.idle);
+  }
+
+  bool _disposed = false;
+
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await _disposeController();
+    if (!_stateController.isClosed) await _stateController.close();
   }
 
   Future<void> _disposeController() async {
     final c = _controller;
+    _controller = null; // detach first so late callbacks find no controller
     if (c != null) {
       c.removeListener(_onControllerUpdate);
-      await c.dispose();
-      _controller = null;
+      try {
+        await c.dispose();
+      } catch (_) {}
     }
   }
 
   void _emit(PlaybackState s) {
     _state = s;
-    if (!_stateController.isClosed) _stateController.add(s);
+    // A late controller callback can arrive after the stream is closed; never
+    // let that crash the app.
+    try {
+      if (!_stateController.isClosed) _stateController.add(s);
+    } catch (_) {}
   }
 }

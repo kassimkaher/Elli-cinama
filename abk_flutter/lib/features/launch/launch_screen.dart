@@ -30,10 +30,11 @@ class _LaunchScreenState extends ConsumerState<LaunchScreen> {
     ref.read(moviesProvider.future).ignore();
     ref.read(seriesListProvider.future).ignore();
 
-    Timer(const Duration(milliseconds: 1500), () {
+    Timer(const Duration(milliseconds: 700), () {
       if (mounted) setState(() => _showText = true);
     });
-    Timer(const Duration(milliseconds: 900), () {
+    // Proceed to the app quickly — catalogues stream in behind their skeletons.
+    Timer(const Duration(milliseconds: 450), () {
       if (mounted) ref.read(appReadyProvider.notifier).state = true;
     });
   }

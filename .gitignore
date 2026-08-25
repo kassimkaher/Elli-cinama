@@ -28,3 +28,6 @@
 
 # Note: abk_flutter/ has its own .gitignore (build/, .dart_tool/, ephemeral, …).
 # tools/ and docs/ remain tracked as project deliverables.
+
+# Release binaries (not committed)
+release_artifacts/

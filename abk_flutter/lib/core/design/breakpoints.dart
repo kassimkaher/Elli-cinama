@@ -21,13 +21,23 @@ class AbkBreakpoints {
     return WidthClass.wideDesktop;
   }
 
-  static WidthClass of(BuildContext context) =>
-      resolve(MediaQuery.sizeOf(context).width);
+  /// Set once at bootstrap when the app runs on an Android TV / Google TV
+  /// (leanback) device. Forces the [WidthClass.tv] 10-foot presentation
+  /// everywhere, regardless of the (often 1080p/4K) window width.
+  static bool isTv = false;
 
+  static WidthClass of(BuildContext context) =>
+      resolve(MediaQuery.sizeOf(context).width, tv: isTv);
+
+  /// TV is treated as a large desktop-class screen (grids, split/three-pane,
+  /// sidebar) so the UI adapts structurally rather than scaling a phone.
   static bool isDesktopClass(WidthClass c) =>
-      c == WidthClass.desktop || c == WidthClass.wideDesktop;
+      c == WidthClass.tv || c == WidthClass.desktop || c == WidthClass.wideDesktop;
   static bool usesSidebar(WidthClass c) =>
-      c == WidthClass.desktop || c == WidthClass.wideDesktop || c == WidthClass.expanded;
+      c == WidthClass.tv ||
+      c == WidthClass.desktop ||
+      c == WidthClass.wideDesktop ||
+      c == WidthClass.expanded;
   static bool usesBottomBar(WidthClass c) =>
       c == WidthClass.compact || c == WidthClass.medium;
 
@@ -77,5 +87,5 @@ class AbkBreakpoints {
       };
 
   static double minHitTarget(WidthClass c) =>
-      isDesktopClass(c) ? 32 : (c == WidthClass.tv ? 64 : 48);
+      c == WidthClass.tv ? 64 : (isDesktopClass(c) ? 32 : 48);
 }

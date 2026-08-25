@@ -39,7 +39,15 @@ abstract class PlaybackService {
   Future<void> load(PlaybackSource source);
   Future<void> play();
   Future<void> pause();
+
+  /// Seek to [position] (VOD only; a no-op when the source is not seekable).
+  Future<void> seek(Duration position);
+
+  /// Fully release the active media (stops audio and frees the decoder). After
+  /// [stop] the service is idle with no controller — leaving a player must call
+  /// this so no audio leaks and no orphan decoder survives.
   Future<void> stop();
+
   Future<void> dispose();
   Stream<PlaybackState> get stateStream;
   PlaybackState get state;

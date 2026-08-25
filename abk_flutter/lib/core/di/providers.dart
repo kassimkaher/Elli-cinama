@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,7 +84,12 @@ final contentApiResolverProvider = Provider<ContentApiResolver>(
 final keyValueStoreProvider = Provider<KeyValueStore>(
     (ref) => SharedPrefsKeyValueStore(ref.watch(sharedPreferencesProvider)));
 
-final secureStoreProvider = Provider<SecureStore>((_) => FlutterSecureStore());
+// macOS: avoid the Keychain entirely (it prompts for the system password on
+// every rebuild of a locally-signed app). The App Sandbox container is private
+// to this app, so a file store there needs no Keychain and never prompts.
+// iOS/Android keep flutter_secure_storage, which does not have this problem.
+final secureStoreProvider = Provider<SecureStore>(
+    (_) => Platform.isMacOS ? MacOsFileSecureStore() : FlutterSecureStore());
 
 final runtimeSessionProvider = Provider<RuntimeSession>((_) => RuntimeSession());
 

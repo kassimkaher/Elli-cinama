@@ -6,22 +6,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/design/breakpoints.dart';
 import '../core/di/providers.dart';
 
 bool _fvpRegistered = false;
 
-/// iOS media adapter. On iOS, `video_player`/AVFoundation cannot decode the
-/// backend's raw MPEG-TS live streams (verified on real hardware). Registering
-/// [fvp] backs `video_player` with libmdk/FFmpeg **for iOS only**, so the same
-/// `VideoPlayerController` code path decodes MPEG-TS on-device. Android keeps
-/// ExoPlayer and macOS keeps AVFoundation — neither is in the platform list, so
-/// both are untouched. This sits entirely behind the existing `PlaybackService`
-/// seam: no feature/UI/state changes.
-void _registerIosPlaybackAdapter() {
+/// Apple media adapter. On iOS **and macOS**, `video_player`/AVFoundation cannot
+/// decode the backend's raw MPEG-TS live streams (verified on iOS hardware; the
+/// same AVFoundation limitation applies on macOS). Registering [fvp] backs
+/// `video_player` with libmdk/FFmpeg on those platforms, so the same
+/// `VideoPlayerController` code path decodes MPEG-TS live + VOD. Android is NOT
+/// in the list, so it keeps ExoPlayer (which already decodes MPEG-TS well) and
+/// is untouched. This sits entirely behind the existing `PlaybackService` seam:
+/// no feature/UI/state changes.
+void _registerApplePlaybackAdapter() {
   if (_fvpRegistered) return;
-  fvp.registerWith(options: {
-    'platforms': ['ios'],
-  });
+  // Only call registerWith on Apple platforms — never risk touching Android.
+  if (Platform.isIOS || Platform.isMacOS) {
+    fvp.registerWith(options: {
+      'platforms': ['ios', 'macos'],
+    });
+  }
   _fvpRegistered = true;
 }
 
@@ -30,7 +35,8 @@ void _registerIosPlaybackAdapter() {
 /// any persisted session — then returns a ready [ProviderContainer].
 Future<ProviderContainer> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
-  _registerIosPlaybackAdapter();
+  _registerApplePlaybackAdapter();
+  AbkBreakpoints.isTv = await _isAndroidTv(); // drives the 10-foot presentation
   final prefs = await SharedPreferences.getInstance();
   final model = await _deviceModel();
 
@@ -40,12 +46,37 @@ Future<ProviderContainer> bootstrap() async {
   ]);
 
   // Effective CONTENT_API (Remote Config `activity` -> validate -> fallback).
-  await container.read(contentApiResolverProvider).resolve();
+  // Bounded tightly so a slow/unreachable Remote Config cannot stall first
+  // frame — the known-good fallback host is used if it does not resolve fast.
+  await container
+      .read(contentApiResolverProvider)
+      .resolve(timeout: const Duration(seconds: 3));
 
-  // Restore persisted session (secure storage).
+  // Restore persisted session (secure storage) — the single session read.
   await container.read(sessionControllerProvider.notifier).restore();
 
+  // Warm the parental PIN into memory once, so content/playback paths never
+  // read the Keychain again (avoids repeated macOS system-password prompts).
+  await container.read(parentalLockRepositoryProvider).warmUp();
+
   return container;
+}
+
+/// True on Android TV / Google TV (leanback) devices. Detected from the
+/// declared system features so the app can force its 10-foot presentation.
+/// Overridable for emulator/dev via `--dart-define=ABK_FORCE_TV=true`.
+Future<bool> _isAndroidTv() async {
+  if (const bool.fromEnvironment('ABK_FORCE_TV')) return true;
+  if (!Platform.isAndroid) return false;
+  try {
+    final info = await DeviceInfoPlugin().androidInfo;
+    final f = info.systemFeatures;
+    return f.contains('android.software.leanback') ||
+        f.contains('android.software.leanback_only') ||
+        f.contains('android.hardware.type.television');
+  } catch (_) {
+    return false;
+  }
 }
 
 Future<String> _deviceModel() async {

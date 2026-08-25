@@ -8,6 +8,7 @@ import '../../core/design/tokens.dart';
 import '../../core/i18n/strings.dart';
 import '../../shared/state/states.dart';
 import '../../shared/widgets/brand.dart';
+import '../../shared/widgets/focusable.dart';
 import '../auth/presentation/auth_controller.dart';
 import '../../core/di/providers.dart';
 import '../favorites/favorites_screen.dart';
@@ -184,7 +185,8 @@ class _DesktopScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final labelled = MediaQuery.sizeOf(context).width >= AbkBreakpoints.desktop;
-    final width = labelled ? 232.0 : 72.0;
+    // Wider rail on TV to hold the larger 10-foot typography.
+    final width = labelled ? (AbkBreakpoints.isTv ? 320.0 : 232.0) : 72.0;
     return Scaffold(
       body: Row(children: [
         Container(
@@ -252,9 +254,13 @@ class _SidebarSearch extends StatelessWidget {
             Icon(Icons.search_rounded, size: 18, color: c.textMuted),
             if (labelled) ...[
               const SizedBox(width: 8),
-              Text(context.tr('search'), style: context.type.body.copyWith(color: c.textMuted)),
-              const Spacer(),
-              Text('/', style: context.type.metadata),
+              Expanded(
+                child: Text(context.tr('search'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.body.copyWith(color: c.textMuted)),
+              ),
+              if (!AbkBreakpoints.isTv) Text('/', style: context.type.metadata),
             ],
           ]),
         ),
@@ -273,27 +279,39 @@ class _SidebarItem extends StatelessWidget {
     final c = context.c;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: InkWell(
-        borderRadius: AbkRadius.brSm,
+      child: AbkFocusable(
         onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: labelled ? 12 : 0, vertical: 11),
-          decoration: BoxDecoration(
-              color: selected ? c.surfaceStrong : Colors.transparent, borderRadius: AbkRadius.brSm),
-          child: Row(
-            mainAxisAlignment: labelled ? MainAxisAlignment.start : MainAxisAlignment.center,
-            children: [
-              Icon(dest.icon, size: 20, color: selected ? c.accentPrimary : c.textSecondary),
-              if (labelled) ...[
-                const SizedBox(width: 12),
-                Text(context.tr(dest.labelKey),
-                    style: context.type.body.copyWith(
-                        color: selected ? c.textPrimary : c.textSecondary,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+        selected: selected,
+        radius: AbkRadius.brSm,
+        semanticLabel: context.tr(dest.labelKey),
+        builder: (ctx, states) {
+          final active = selected || states.contains(WidgetState.focused);
+          return Container(
+            padding: EdgeInsets.symmetric(horizontal: labelled ? 12 : 0, vertical: 11),
+            decoration: BoxDecoration(
+                color: active ? c.surfaceStrong : Colors.transparent,
+                borderRadius: AbkRadius.brSm),
+            child: Row(
+              mainAxisAlignment:
+                  labelled ? MainAxisAlignment.start : MainAxisAlignment.center,
+              children: [
+                Icon(dest.icon,
+                    size: 20, color: active ? c.accentPrimary : c.textSecondary),
+                if (labelled) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(context.tr(dest.labelKey),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.type.body.copyWith(
+                            color: active ? c.textPrimary : c.textSecondary,
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

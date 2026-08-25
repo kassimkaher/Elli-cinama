@@ -92,6 +92,9 @@ class _AbkFocusableState extends State<AbkFocusable> {
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        // Android TV / Google TV D-pad centre.
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
       actions: {
         ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {

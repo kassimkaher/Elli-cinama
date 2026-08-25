@@ -3,13 +3,13 @@
 Only **intentionally deferred platform work** belongs here. No unfinished core-product
 features are listed — the product is feature-complete (see PRODUCT_COMPLETION_STATUS.md).
 
-## 1. iOS physical device — player/device closure
-- Real-device install/signing, on-device smoke, real MPEG-TS/HLS/VOD playback, hardware
-  decode, audio routing, lifecycle, performance.
-- iOS-specific playback adapter (media_kit / libmpv) **only if** `video_player`/AVFoundation
-  fails MPEG-TS on real hardware — integrated behind the existing `PlaybackService` seam.
-- Detail: `IOS_PHYSICAL_DEVICE_DEFERRED.md`.
-- Status at Product Completion close: **DEFERRED** (dedicated physical-iPhone phase now in progress; see `docs/platform-qa/ios/`).
+## 1. iOS physical device — player/device closure — ✅ CLOSED
+- **CLOSED** in the Physical iPhone phase (2026-08-25). The `fvp` (libmdk/FFmpeg) iOS-only
+  adapter was required and implemented behind the existing `PlaybackService` seam; live
+  MPEG-TS + channel-switch + movie + episode all validated `playing` on iPhone 15 / iOS 26.5.
+- Detail: `docs/platform-qa/ios/IOS_PHYSICAL_DEVICE_QA_CLOSURE.md`, `IOS_PLAYER_IMPLEMENTATION.md`.
+- Only **distribution/App Store** work remains: `docs/platform-qa/ios/IOS_APP_STORE_FOLLOWUP.md`
+  (plus optional observational audio-routing checks needing external hardware).
 
 ## 2. Windows — implementation / QA
 - **DEFERRED.** Not started. To be addressed only after: product complete · Android closed ·

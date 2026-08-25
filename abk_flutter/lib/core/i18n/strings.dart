@@ -68,6 +68,10 @@ class AbkStrings {
     'reconnecting': {'ar': 'إعادة الاتصال…', 'en': 'Reconnecting…'},
     'streamFailed': {'ar': 'تعذّر تشغيل البث', 'en': 'Playback failed'},
     'preparing': {'ar': 'جارٍ التحضير…', 'en': 'Preparing…'},
+    'prevChannel': {'ar': 'القناة السابقة', 'en': 'Previous channel'},
+    'nextChannel': {'ar': 'القناة التالية', 'en': 'Next channel'},
+    'prevEpisode': {'ar': 'الحلقة السابقة', 'en': 'Previous episode'},
+    'nextEpisode': {'ar': 'الحلقة التالية', 'en': 'Next episode'},
     // catalogue / search
     'searchEverything': {'ar': 'ابحث في كل المحتوى', 'en': 'Search everything'},
     'noResults': {'ar': 'لا توجد نتائج', 'en': 'No results'},
