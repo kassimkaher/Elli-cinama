@@ -34,7 +34,7 @@ class ContentClient {
     required this.codec,
     required this.resolver,
     required this.logger,
-    this.timeout = const Duration(seconds: 30),
+    this.timeout = const Duration(seconds: 45),
   });
 
   Future<Result<T>> callObject<T>({
@@ -61,71 +61,91 @@ class ContentClient {
     });
   }
 
+  /// Total attempts per call. A single transient failure (timeout/connectivity)
+  /// on a large-catalogue payload retries once with a short backoff before
+  /// surfacing a recoverable error to the UI. Deterministic failures
+  /// (HTTP status, parse, decode) never retry.
+  static const int maxAttempts = 2;
+
   Future<Result<R>> _call<R>(
     Map<String, dynamic> payload,
     R Function(Object json) shape,
   ) async {
     final uri = resolver.currentOrFallback;
     final mode = payload['mode']?.toString() ?? '(none)';
+
+    final String body;
     try {
       final cipher = codec.encodeString(jsonEncode(payload));
-      final body = 'json=${_percentEncodeBytes(cipher)}';
-
-      final resp = await httpClient
-          .post(
-            uri,
-            headers: const {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Accept-Encoding': 'identity',
-            },
-            body: body,
-            encoding: latin1,
-          )
-          .timeout(timeout);
-
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        logger.warn('content', 'mode=$mode http=${resp.statusCode}');
-        return Err(HttpFailure(resp.statusCode));
-      }
-
-      final bytes = resp.bodyBytes;
-      if (bytes.isEmpty) {
-        return Err(const EmptyResultFailure(message: 'Empty response body'));
-      }
-
-      final Object decoded;
-      try {
-        decoded = bytes.length > isolateThresholdBytes
-            ? (await compute(decodeContentJson, (bytes, codec.key)) as Object)
-            : (_decodeInline(bytes) as Object);
-      } on FormatException catch (e) {
-        logger.warn('content', 'mode=$mode JSON parse failed');
-        return Err(ParseFailure(cause: e));
-      } catch (e) {
-        logger.warn('content', 'mode=$mode decode failed');
-        return Err(DecodeFailure(cause: e));
-      }
-
-      try {
-        return Ok(shape(decoded));
-      } on FormatException catch (e) {
-        return Err(ParseFailure(message: e.message, cause: e));
-      } catch (e) {
-        return Err(ParseFailure(cause: e));
-      }
-    } on TimeoutException catch (e) {
-      logger.warn('content', 'mode=$mode timeout');
-      return Err(TimeoutFailure(cause: e));
-    } on SocketException catch (e) {
-      logger.warn('content', 'mode=$mode connectivity error');
-      return Err(ConnectivityFailure(cause: e));
-    } on http.ClientException catch (e) {
-      logger.warn('content', 'mode=$mode client error');
-      return Err(ConnectivityFailure(message: 'Network client error', cause: e));
+      body = 'json=${_percentEncodeBytes(cipher)}';
     } catch (e) {
-      logger.error('content', 'mode=$mode unexpected error', e);
+      logger.error('content', 'mode=$mode payload encode failed', e);
       return Err(UnknownFailure(cause: e));
     }
+
+    Failure transient = const TimeoutFailure();
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final resp = await httpClient
+            .post(
+              uri,
+              headers: const {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept-Encoding': 'identity',
+              },
+              body: body,
+              encoding: latin1,
+            )
+            .timeout(timeout);
+
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          logger.warn('content', 'mode=$mode http=${resp.statusCode}');
+          return Err(HttpFailure(resp.statusCode));
+        }
+
+        final bytes = resp.bodyBytes;
+        if (bytes.isEmpty) {
+          return Err(const EmptyResultFailure(message: 'Empty response body'));
+        }
+
+        final Object decoded;
+        try {
+          decoded = bytes.length > isolateThresholdBytes
+              ? (await compute(decodeContentJson, (bytes, codec.key)) as Object)
+              : (_decodeInline(bytes) as Object);
+        } on FormatException catch (e) {
+          logger.warn('content', 'mode=$mode JSON parse failed');
+          return Err(ParseFailure(cause: e));
+        } catch (e) {
+          logger.warn('content', 'mode=$mode decode failed');
+          return Err(DecodeFailure(cause: e));
+        }
+
+        try {
+          return Ok(shape(decoded));
+        } on FormatException catch (e) {
+          return Err(ParseFailure(message: e.message, cause: e));
+        } catch (e) {
+          return Err(ParseFailure(cause: e));
+        }
+      } on TimeoutException catch (e) {
+        logger.warn('content', 'mode=$mode timeout (attempt $attempt/$maxAttempts)');
+        transient = TimeoutFailure(cause: e);
+      } on SocketException catch (e) {
+        logger.warn('content', 'mode=$mode connectivity error (attempt $attempt/$maxAttempts)');
+        transient = ConnectivityFailure(cause: e);
+      } on http.ClientException catch (e) {
+        logger.warn('content', 'mode=$mode client error (attempt $attempt/$maxAttempts)');
+        transient = ConnectivityFailure(message: 'Network client error', cause: e);
+      } catch (e) {
+        logger.error('content', 'mode=$mode unexpected error', e);
+        return Err(UnknownFailure(cause: e));
+      }
+      if (attempt < maxAttempts) {
+        await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+      }
+    }
+    return Err(transient);
   }
 
   Object? _decodeInline(Uint8List bytes) => decodeContentJson((bytes, codec.key));

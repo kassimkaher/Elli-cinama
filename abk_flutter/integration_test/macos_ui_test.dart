@@ -17,6 +17,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final _cats = [const LiveCategory(id: '1', name: 'Sports', channelCount: 3)];
 final _channels = [
@@ -29,7 +30,9 @@ final _movies = [
 ];
 final _series = [const SeriesListItem(id: 's1', title: 'Cactus House', genre: 'Drama', rating: '7.9')];
 
-List<Override> _overrides() => [
+List<Override> _overrides(SharedPreferences prefs) => [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      deviceModelProvider.overrideWithValue('generic'),
       keyValueStoreProvider.overrideWithValue(InMemoryKeyValueStore()),
       secureStoreProvider.overrideWithValue(InMemorySecureStore()),
       liveCategoriesProvider.overrideWith((ref) => _cats),
@@ -62,7 +65,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('macOS UI: shell renders Home, navigates catalogues, opens search', (t) async {
-    final container = ProviderContainer(overrides: _overrides());
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(overrides: _overrides(prefs));
     addTearDown(container.dispose);
 
     await t.pumpWidget(UncontrolledProviderScope(container: container, child: _app()));
@@ -94,7 +99,7 @@ void main() {
     // Settings tab.
     container.read(shellIndexProvider.notifier).state = 5;
     await t.pump(const Duration(milliseconds: 500));
-    expect(find.byIcon(Icons.logout_rounded), findsWidgets);
+    expect(find.byIcon(Icons.account_circle_rounded), findsWidgets);
     print('UI: Settings rendered');
 
     // Open global search.

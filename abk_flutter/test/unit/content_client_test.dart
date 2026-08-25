@@ -1,4 +1,5 @@
 import 'package:abk_player/core/errors/failures.dart';
+import 'package:abk_player/core/network/content_client.dart';
 import 'package:abk_player/core/utils/result.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -80,6 +81,48 @@ void main() {
       final ok = res as Ok;
       expect(ok.value.length, 20000);
       expect(ok.value.first, '0');
+    });
+
+    test('retries once on a transient error, then succeeds', () async {
+      var calls = 0;
+      final client = contentClientWith((req) async {
+        calls++;
+        if (calls == 1) {
+          throw http.ClientException('transient reset');
+        }
+        return contentResponse([
+          {'id': '1'},
+          {'id': '2'},
+        ]);
+      });
+      final res = await client.callList(
+        payload: {'mode': 'channels'},
+        itemDecoder: (j) => (j as Map)['id'],
+      );
+      expect(calls, 2, reason: 'first attempt failed, retry succeeded');
+      expect((res as Ok).value, ['1', '2']);
+    });
+
+    test('gives up after maxAttempts on a persistent transient error', () async {
+      var calls = 0;
+      final client = contentClientWith((req) async {
+        calls++;
+        throw http.ClientException('down');
+      });
+      final res = await client.callList(payload: {'mode': 'channels'}, itemDecoder: (j) => j);
+      expect(calls, ContentClient.maxAttempts);
+      expect((res as Err).failure, isA<ConnectivityFailure>());
+    });
+
+    test('does not retry a deterministic HTTP failure', () async {
+      var calls = 0;
+      final client = contentClientWith((req) async {
+        calls++;
+        return http.Response('nope', 403);
+      });
+      final res = await client.callObject(payload: {'mode': 'login'}, decoder: (j) => j);
+      expect(calls, 1, reason: 'HTTP status is deterministic — no retry');
+      expect((res as Err).failure, isA<HttpFailure>());
     });
   });
 }

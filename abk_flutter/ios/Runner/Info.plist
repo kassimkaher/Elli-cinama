@@ -14,6 +14,15 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- The confirmed backend streams live/VOD and serves EPG over cleartext HTTP
+		     with a rotating host; native AVFoundation playback requires this ATS
+		     relief. The content middleware (Remote Config `activity`) is HTTPS, and
+		     Dart (dart:io) networking is not ATS-bound. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>CFBundleName</key>
 	<string>abk_player</string>
 	<key>CFBundlePackageType</key>

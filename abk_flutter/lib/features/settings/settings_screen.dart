@@ -66,7 +66,7 @@ class SettingsScreen extends ConsumerWidget {
             ref.invalidate(seriesListProvider);
             ref.invalidate(liveChannelsProvider);
             ref.invalidate(liveCategoriesProvider);
-            showAbkSnackbar(context, context.tr('clearCache'));
+            showAbkSnackbar(context, context.tr('cacheCleared'));
           },
         ),
       ]),
@@ -113,7 +113,10 @@ class _Group extends StatelessWidget {
         decoration: BoxDecoration(
             color: context.c.surface, borderRadius: AbkRadius.brMd,
             border: Border.all(color: context.c.borderSubtle)),
-        child: Column(children: children),
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(children: children),
+        ),
       ),
     ]);
   }

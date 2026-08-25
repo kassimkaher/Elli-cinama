@@ -7,6 +7,7 @@ import '../../core/di/providers.dart';
 import '../../core/i18n/strings.dart';
 import '../../shared/state/states.dart';
 import '../../shared/widgets/buttons.dart';
+import '../catalogue/catalogue_providers.dart';
 
 class ParentalLockTile extends ConsumerStatefulWidget {
   const ParentalLockTile({super.key});
@@ -32,15 +33,16 @@ class _ParentalLockTileState extends ConsumerState<ParentalLockTile> {
     var pin = '';
     final repo = ref.read(parentalLockRepositoryProvider);
     await showAbkDialog<void>(context,
-        title: _hasPin ? context.tr('setPin') : context.tr('setPin'),
+        title: _hasPin ? context.tr('changePin') : context.tr('setPin'),
         content: StatefulBuilder(builder: (ctx, setLocal) {
           return Column(mainAxisSize: MainAxisSize.min, children: [
             PinInput(value: pin, onChanged: (v) => setLocal(() => pin = v)),
             const SizedBox(height: AbkSpace.s16),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               if (_hasPin)
-                AbkButton(context.tr('clearCache'), kind: AbkButtonKind.ghost, onPressed: () async {
+                AbkButton(context.tr('removePin'), kind: AbkButtonKind.destructive, onPressed: () async {
                   await repo.clearPin();
+                  ref.read(localRevisionProvider.notifier).state++;
                   if (ctx.mounted) Navigator.pop(ctx);
                   _refresh();
                 }),
@@ -48,6 +50,7 @@ class _ParentalLockTileState extends ConsumerState<ParentalLockTile> {
               AbkButton(context.tr('ok'), onPressed: pin.length == 4
                   ? () async {
                       await repo.setPin(pin);
+                      ref.read(localRevisionProvider.notifier).state++;
                       if (ctx.mounted) Navigator.pop(ctx);
                       _refresh();
                     }
@@ -64,7 +67,7 @@ class _ParentalLockTileState extends ConsumerState<ParentalLockTile> {
       contentPadding: EdgeInsets.zero,
       leading: Icon(_hasPin ? Icons.lock_rounded : Icons.lock_open_rounded, color: c.textSecondary),
       title: Text(context.tr('parentalLock'), style: context.type.body),
-      subtitle: Text(_hasPin ? context.tr('setPin') : context.tr('setPin'), style: context.type.caption),
+      subtitle: Text(_hasPin ? context.tr('pinProtected') : context.tr('pinNotSet'), style: context.type.caption),
       trailing: Icon(context.isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded, color: c.textMuted),
       onTap: _managePin,
     );

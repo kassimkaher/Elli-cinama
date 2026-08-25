@@ -60,6 +60,13 @@ final shortEpgProvider = FutureProvider.family<List<EpgListing>, int>((ref, stre
 /// UI recomputes without a backend call.
 final localRevisionProvider = StateProvider<int>((_) => 0);
 
+/// Whether a parental PIN is configured. Restricted (backend-locked) content is
+/// only visually flagged / enforced when this is true. Recomputes on lock edits.
+final hasParentalPinProvider = FutureProvider<bool>((ref) async {
+  ref.watch(localRevisionProvider);
+  return ref.read(parentalLockRepositoryProvider).hasPin();
+});
+
 final favoriteChannelsProvider = FutureProvider<List<LiveChannel>>((ref) async {
   ref.watch(localRevisionProvider);
   final ids = await ref.read(favoritesRepositoryProvider).getFavorites('live');

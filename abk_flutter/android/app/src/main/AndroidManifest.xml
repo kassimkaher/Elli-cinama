@@ -1,8 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Networking. INTERNET must be declared here so it is present in the
+         RELEASE manifest (Flutter only auto-adds it for debug/profile).
+         ACCESS_NETWORK_STATE supports connectivity-aware behaviour. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
-        android:label="abk_player"
+        android:label="ABK"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"

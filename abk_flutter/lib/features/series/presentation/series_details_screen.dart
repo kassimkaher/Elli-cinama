@@ -11,8 +11,8 @@ import '../../../shared/widgets/cards.dart';
 import '../../../shared/widgets/images.dart';
 import '../../../shared/widgets/layout.dart';
 import '../../catalogue/catalogue_providers.dart';
-import '../../favorites/playback_history_repository.dart';
 import '../../player/player_screen.dart';
+import '../../settings/parental_gate.dart';
 import '../domain/entities.dart';
 
 final _seasonProvider = StateProvider.autoDispose<int>((_) => 0);
@@ -77,7 +77,7 @@ class SeriesDetailsScreen extends ConsumerWidget {
                                 title: '${e.episodeNum ?? ''}  ${e.episodeName ?? ''}'.trim(),
                                 subtitle: d.info?.title ?? series.title,
                                 thumbUrl: series.icon,
-                                onTap: () => _playEpisode(context, ref, e, d),
+                                onTap: () => _playEpisode(context, ref, episodes, episodes.indexOf(e), d),
                               ),
                             )),
                       const SizedBox(height: AbkSpace.s24),
@@ -92,25 +92,33 @@ class SeriesDetailsScreen extends ConsumerWidget {
     );
   }
 
-  void _playEpisode(BuildContext context, WidgetRef ref, Episode e, SeriesInfo d) {
-    final url = e.streamUrl;
-    if (url == null || url.isEmpty) {
+  Future<void> _playEpisode(
+      BuildContext context, WidgetRef ref, List<Episode> eps, int index, SeriesInfo d) async {
+    final cats = ref.read(seriesCategoriesProvider).valueOrNull;
+    final catLocked =
+        cats?.any((c) => c.id == series.categoryId && c.isLocked) ?? false;
+    final allowed = await ensureUnlocked(context, ref,
+        kind: 'series', id: series.id, categoryLocked: catLocked);
+    if (!allowed || !context.mounted) return;
+    final title = d.info?.title ?? series.title;
+    final playableEps = eps.where((e) => (e.streamUrl ?? '').isNotEmpty).toList();
+    if (playableEps.isEmpty) {
       showAbkSnackbar(context, context.tr('streamFailed'));
       return;
     }
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => PlayerScreen(
-        url: url,
-        title: '${d.info?.title ?? series.title} · ${e.episodeName ?? ''}',
-        subtitle: e.episodeNum != null ? '${context.tr('episode')} ${e.episodeNum}' : null,
-        history: PlaybackEntry(
-          id: '${series.id}_${e.episodeNum}', kind: 'episode',
-          title: d.info?.title ?? series.title,
-          subtitle: e.episodeName ?? '',
-          image: series.icon,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      ),
-    ));
+    final items = playableEps
+        .map((e) => PlaybackItem(
+              url: e.streamUrl!,
+              title: '$title · ${e.episodeName ?? ''}'.trim(),
+              subtitle: e.episodeNum != null ? '${context.tr('episode')} ${e.episodeNum}' : null,
+              resumeId: '${series.id}_${e.episodeNum}',
+              kind: 'episode',
+              image: series.icon,
+            ))
+        .toList();
+    var i = playableEps.indexOf(eps[index]);
+    if (i < 0) i = 0;
+    Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PlayerScreen(items: items, index: i)));
   }
 }

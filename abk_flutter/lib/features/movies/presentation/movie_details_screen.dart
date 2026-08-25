@@ -12,8 +12,8 @@ import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/images.dart';
 import '../../../shared/widgets/layout.dart';
 import '../../catalogue/catalogue_providers.dart';
-import '../../favorites/playback_history_repository.dart';
 import '../../player/player_screen.dart';
+import '../../settings/parental_gate.dart';
 import '../domain/entities.dart';
 
 class MovieDetailsScreen extends ConsumerWidget {
@@ -39,23 +39,27 @@ class _DetailsBody extends ConsumerWidget {
   final MovieInfo info;
   const _DetailsBody({required this.movie, required this.info});
 
-  void _play(BuildContext context, WidgetRef ref) {
+  Future<void> _play(BuildContext context, WidgetRef ref) async {
+    final cats = ref.read(movieCategoriesProvider).valueOrNull;
+    final catLocked =
+        cats?.any((c) => c.id == movie.categoryId && c.isLocked) ?? false;
+    final allowed = await ensureUnlocked(context, ref,
+        kind: 'movie', id: movie.id, categoryLocked: catLocked);
+    if (!allowed || !context.mounted) return;
     final url = ref.read(selectMovieQualityProvider).call(info);
     if (url == null || url.isEmpty) {
       showAbkSnackbar(context, context.tr('streamFailed'));
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => PlayerScreen(
+      builder: (_) => PlayerScreen.single(PlaybackItem(
         url: url,
         title: info.title,
         subtitle: MetadataText.of(info),
-        history: PlaybackEntry(
-          id: movie.id, kind: 'movie', title: info.title,
-          subtitle: MetadataText.of(info), image: movie.icon,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      ),
+        resumeId: movie.id,
+        kind: 'movie',
+        image: movie.icon,
+      )),
     ));
   }
 
@@ -77,9 +81,6 @@ class _DetailsBody extends ConsumerWidget {
     final actions = Wrap(spacing: 12, runSpacing: 12, children: [
       AbkButton(context.tr('play'), icon: Icons.play_arrow_rounded, autofocus: true, onPressed: () => _play(context, ref)),
       _FavButton(id: movie.id, kind: 'movie'),
-      if ((info.trailer ?? '').isNotEmpty)
-        AbkButton(context.tr('watchTrailer'), kind: AbkButtonKind.ghost, icon: Icons.ondemand_video_rounded,
-            onPressed: () => showAbkSnackbar(context, context.tr('watchTrailer'))),
     ]);
 
     final details = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

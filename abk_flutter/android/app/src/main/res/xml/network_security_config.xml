@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The confirmed backend streams live/VOD and serves EPG over cleartext HTTP
+     (the login response `host` / `player_api` use http:// and the streaming
+     host can rotate). Cleartext is therefore permitted. The content middleware
+     itself (Remote Config `activity`) is HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -48,8 +48,9 @@ class PosterCard extends StatelessWidget {
         semanticLabel: title,
         builder: (ctx, states) {
           final active = states.contains(WidgetState.hovered) || states.contains(WidgetState.focused);
-          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            AspectRatio(
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Flexible(
+              child: AspectRatio(
               aspectRatio: AbkAspect.poster,
               child: Opacity(
                 opacity: disabled ? 0.45 : 1,
@@ -91,7 +92,7 @@ class PosterCard extends StatelessWidget {
                   ]),
                 ),
               ),
-            ),
+            )),
             const SizedBox(height: AbkSpace.s8),
             Text(title,
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: context.type.cardTitle),
@@ -127,8 +128,9 @@ class ContinueWatchingCard extends StatelessWidget {
         onTap: onTap,
         radius: AbkRadius.brMd,
         semanticLabel: title,
-        builder: (ctx, states) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          AspectRatio(
+        builder: (ctx, states) => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Flexible(
+            child: AspectRatio(
             aspectRatio: AbkAspect.continueWatching,
             child: Stack(fit: StackFit.expand, children: [
               AbkImage(url: imageUrl, radius: AbkRadius.brMd, fallback: PosterFallback(title)),
@@ -155,7 +157,7 @@ class ContinueWatchingCard extends StatelessWidget {
                 ]),
               ),
             ]),
-          ),
+          )),
           const SizedBox(height: AbkSpace.s8),
           Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.type.cardTitle),
           Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.type.caption),

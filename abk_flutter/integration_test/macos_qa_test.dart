@@ -54,6 +54,8 @@ void main() {
 
   testWidgets('auth: unauth → login → authenticated → restart-restore → logout',
       (t) async {
+    // Clear any leftover persisted session first (test isolation).
+    await c.read(sessionControllerProvider.notifier).logout();
     expect(c.read(sessionControllerProvider), isA<AuthLoggedOut>());
 
     await timed('login', () => c.read(sessionControllerProvider.notifier).login(_user, _pass));

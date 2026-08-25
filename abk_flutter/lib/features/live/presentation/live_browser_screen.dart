@@ -12,8 +12,8 @@ import '../../../shared/widgets/images.dart';
 import '../../../shared/widgets/layout.dart';
 import '../../../core/di/providers.dart';
 import '../../catalogue/catalogue_providers.dart';
-import '../../favorites/playback_history_repository.dart';
 import '../../player/player_screen.dart';
+import '../../settings/parental_gate.dart';
 import '../domain/entities.dart';
 
 final _selCategoryProvider = StateProvider<int?>((_) => null);
@@ -21,69 +21,39 @@ final _selChannelProvider = StateProvider<LiveChannel?>((_) => null);
 final _channelQueryProvider = StateProvider.autoDispose<String>((_) => '');
 
 Future<void> playChannel(BuildContext context, WidgetRef ref, LiveChannel ch) async {
-  final locked = await ref.read(parentalLockRepositoryProvider).isLocked('live', '${ch.id}');
-  if (locked && context.mounted) {
-    final ok = await _promptPin(context, ref);
-    if (!ok) return;
-  }
+  final cats = ref.read(liveCategoriesProvider).valueOrNull;
+  final catLocked =
+      cats?.any((cat) => cat.id == '${ch.categoryId}' && cat.isLocked) ?? false;
+  final allowed = await ensureUnlocked(context, ref,
+      kind: 'live', id: '${ch.id}', categoryLocked: catLocked);
+  if (!allowed) return;
   if (!context.mounted) return;
-  final url = ref.read(resolveLiveStreamUrlProvider).call(ch);
+  final resolver = ref.read(resolveLiveStreamUrlProvider);
+  final url = resolver.call(ch);
   if (url == null || url.isEmpty) {
     showAbkSnackbar(context, context.tr('streamFailed'));
     return;
   }
-  Navigator.of(context).push(MaterialPageRoute(
-    builder: (_) => PlayerScreen(
-      url: url,
-      title: ch.name,
-      subtitle: '${ch.viewOrder ?? ch.id}',
-      live: true,
-      history: PlaybackEntry(
-        id: '${ch.id}', kind: 'live', title: ch.name, subtitle: '${ch.viewOrder ?? ch.id}',
-        image: ch.icon, updatedAt: DateTime.now().millisecondsSinceEpoch,
-      ),
-    ),
-  ));
-}
-
-Future<bool> _promptPin(BuildContext context, WidgetRef ref) async {
-  final repo = ref.read(parentalLockRepositoryProvider);
-  if (!await repo.hasPin()) return true; // no pin set → not enforced
-  if (!context.mounted) return false;
-  final controller = ValueNotifier('');
-  final ok = await showAbkDialog<bool>(context,
-      title: context.tr('lockedContent'),
-      content: StatefulBuilder(builder: (ctx, setState) {
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(ctx.tr('lockedContentBody'), style: ctx.type.bodySecondary),
-          const SizedBox(height: AbkSpace.s16),
-          _PinRow(onChanged: (v) async {
-            controller.value = v;
-            if (v.length == 4) {
-              final good = await repo.verify(v);
-              if (good && ctx.mounted) Navigator.pop(ctx, true);
-            }
-          }),
-        ]);
-      }),
-      actions: [AbkButton(context.tr('cancel'), kind: AbkButtonKind.ghost, onPressed: () => Navigator.pop(context, false))]);
-  return ok ?? false;
-}
-
-class _PinRow extends StatefulWidget {
-  final ValueChanged<String> onChanged;
-  const _PinRow({required this.onChanged});
-  @override
-  State<_PinRow> createState() => _PinRowState();
-}
-
-class _PinRowState extends State<_PinRow> {
-  String v = '';
-  @override
-  Widget build(BuildContext context) => PinInput(value: v, onChanged: (nv) {
-        setState(() => v = nv);
-        widget.onChanged(nv);
-      });
+  // Sibling channels (same category) become the up/down switching playlist.
+  final byCat = ref.read(channelsByCategoryProvider).valueOrNull;
+  final siblings = (byCat?[ch.categoryId] ?? const <LiveChannel>[])
+      .where((c) => (c.streamUrlTemplate ?? '').isNotEmpty)
+      .toList();
+  var items = siblings
+      .map((c) => PlaybackItem(
+            url: resolver.call(c) ?? '', title: c.name, subtitle: '${c.viewOrder ?? c.id}',
+            live: true, streamId: c.id, resumeId: '${c.id}', kind: 'live', image: c.icon))
+      .toList();
+  var index = items.indexWhere((it) => it.resumeId == '${ch.id}');
+  if (index < 0) {
+    items = [
+      PlaybackItem(url: url, title: ch.name, subtitle: '${ch.viewOrder ?? ch.id}',
+          live: true, streamId: ch.id, resumeId: '${ch.id}', kind: 'live', image: ch.icon)
+    ];
+    index = 0;
+  }
+  Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => PlayerScreen(items: items, index: index)));
 }
 
 class LiveBrowserScreen extends ConsumerWidget {
@@ -170,6 +140,7 @@ class _ChannelListScreen extends ConsumerWidget {
           if (query.isNotEmpty) {
             channels = channels.where((ch) => ch.name.toLowerCase().contains(query)).toList();
           }
+          final hasPin = ref.watch(hasParentalPinProvider).valueOrNull ?? false;
           return Column(children: [
             Padding(
               padding: const EdgeInsets.all(AbkSpace.s16),
@@ -180,7 +151,7 @@ class _ChannelListScreen extends ConsumerWidget {
                 onClear: () => ref.read(_channelQueryProvider.notifier).state = '',
               ),
             ),
-            Expanded(child: _ChannelList(channels: channels)),
+            Expanded(child: _ChannelList(channels: channels, locked: category.isLocked && hasPin)),
           ]);
         },
       ),
@@ -190,7 +161,8 @@ class _ChannelListScreen extends ConsumerWidget {
 
 class _ChannelList extends ConsumerWidget {
   final List<LiveChannel> channels;
-  const _ChannelList({required this.channels});
+  final bool locked;
+  const _ChannelList({required this.channels, this.locked = false});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(localRevisionProvider);
@@ -210,6 +182,7 @@ class _ChannelList extends ConsumerWidget {
             number: '${ch.viewOrder ?? ch.id}',
             subtitle: null,
             logoUrl: ch.icon,
+            locked: locked,
             archive: ch.hasArchive,
             favorite: snap.data ?? false,
             onTap: () => playChannel(ctx, ref, ch),
@@ -235,6 +208,9 @@ class _ThreePane extends ConsumerWidget {
     final selCat = ref.watch(_selCategoryProvider) ?? (categories.isNotEmpty ? int.tryParse(categories.first.id) : null);
     final selCh = ref.watch(_selChannelProvider);
     final channels = byCat.maybeWhen(data: (m) => m[selCat] ?? const [], orElse: () => const []);
+    final hasPin = ref.watch(hasParentalPinProvider).valueOrNull ?? false;
+    final selCatLocked =
+        hasPin && categories.any((cat) => int.tryParse(cat.id) == selCat && cat.isLocked);
     return Row(children: [
       SizedBox(
         width: 260,
@@ -272,6 +248,7 @@ class _ThreePane extends ConsumerWidget {
                     number: '${ch.viewOrder ?? ch.id}',
                     selected: selCh?.id == ch.id,
                     logoUrl: ch.icon,
+                    locked: selCatLocked,
                     archive: ch.hasArchive,
                     onTap: () => ref.read(_selChannelProvider.notifier).state = ch,
                     onSecondary: () => playChannel(ctx, ref, ch),
