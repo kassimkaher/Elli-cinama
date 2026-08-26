@@ -115,6 +115,22 @@ Owner rejected TV Home/Login/Live as "scaled-up desktop." Reset the TV density f
 
 Verified on the `abk_google_tv` emulator (960×540): Home now shows 6 posters/row with a compact hero (the "before/after" is dramatic — 3→6 cards, giant→small year). `flutter analyze` clean · **107 tests** pass.
 
+## Real TCL Google TV — remote/keyboard closure
+
+Device: **TCL Smart TV Pro (G10)**, Android 12 / API 31, Google TV, 3840×2160→render 1920×1080, density 320 → logical 960×540 (dpr 2.0), ABI armeabi-v7a (needs the universal APK).
+
+| Area | Result |
+|---|---|
+| **First frame** (the TCL-specific bug) | **PASS** — cold launch shows the dark branded splash then login; NO white flash, NO black-nothing (native launch dark day+night + splash-first). |
+| Login density | **PASS** — compact, fits one viewport, username focused on frame 1. |
+| **TV keyboard (was: not navigable)** | **FIXED** — the system leanback IME is not D-pad-navigable inside a Flutter view here (`mCurrentFocus` stays the app window; the IME's key never moves; nothing types). Replaced with an in-app D-pad keyboard (`tv_keyboard.dart`) shown from `AbkTextField`/`SearchField` on TV: keys are real focus targets, D-pad moves between them, OK types, Shift/Backspace/Space/Done work. Verified typing "qw"/"qq". |
+| **BACK while keyboard open (was: exits app)** | **FIXED** — the keyboard is a bottom-sheet route, so BACK closes it and stays on login (app does not exit). Guarded the field (`disabled` while the sheet is open + re-focus after) so typing can't steal focus back and break the single-BACK close. |
+| Field-to-field nav | **PASS** — DOWN traverses username→password→Login→QA card. |
+| QA autofill → Login | **PASS** — OK on QA fills + focuses Login; OK signs in → Home (remote-only). |
+| Focus visibility | **PASS** — white ring + gold glow unmistakable on fields, buttons, keys. |
+
+Remaining TCL QA (in progress): Search keyboard path, Home/Live/Details/Player remote traversal, dialogs, Release stress.
+
 ## Status
 
 - REAL TV LOGIN: **CLOSED**

@@ -5,6 +5,7 @@ import '../../core/design/breakpoints.dart';
 import '../../core/design/theme.dart';
 import '../../core/design/tokens.dart';
 import 'focusable.dart';
+import 'tv_keyboard.dart';
 
 enum AbkButtonKind { primary, secondary, ghost, destructive }
 
@@ -121,6 +122,7 @@ class _AbkTextFieldState extends State<AbkTextField> {
   FocusNode? _internal;
   FocusNode get _node => widget.focusNode ?? (_internal ??= FocusNode());
   bool _editing = false;
+  bool _sheetOpen = false; // TV: the in-app keyboard sheet is open over this field
 
   // On TV the field is focusable-but-not-editing until OK/SELECT, so D-pad focus
   // never auto-opens the on-screen keyboard (which would trap the D-pad). The
@@ -157,6 +159,29 @@ class _AbkTextFieldState extends State<AbkTextField> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_node.hasFocus) return;
       SystemChannels.textInput.invokeMethod('TextInput.show');
+    });
+  }
+
+  /// TV activation: open the in-app D-pad keyboard bound to this field's
+  /// controller (the system leanback IME is not reliably remote-navigable in a
+  /// Flutter view). Falls back to the system IME only if there is no controller.
+  Future<void> _onTvActivate() async {
+    final ctrl = widget.controller;
+    if (ctrl == null) {
+      _beginEdit();
+      return;
+    }
+    // Disable this field while the keyboard sheet is open so typing (which
+    // rebuilds it) can't steal focus back from the keyboard keys — otherwise
+    // BACK gets delivered to the field instead of closing the sheet.
+    setState(() => _sheetOpen = true);
+    await showTvKeyboard(context, ctrl,
+        obscure: widget.obscure,
+        title: widget.hint.isNotEmpty ? widget.hint : widget.label);
+    if (!mounted) return;
+    setState(() => _sheetOpen = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _node.requestFocus();
     });
   }
 
@@ -213,8 +238,10 @@ class _AbkTextFieldState extends State<AbkTextField> {
         ? '•' * text.length.clamp(1, 16)
         : (hasVal ? text : widget.hint);
     return AbkFocusable(
-      onTap: _beginEdit,
-      autofocus: widget.autofocus,
+      onTap: _onTvActivate,
+      focusNode: _node,
+      autofocus: widget.autofocus && !_sheetOpen,
+      disabled: _sheetOpen,
       radius: AbkRadius.brSm,
       semanticLabel: widget.label,
       builder: (ctx, states) {
@@ -332,6 +359,50 @@ class SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    // TV: a focusable pill that opens the in-app D-pad keyboard (the system IME
+    // is not remote-navigable in a Flutter view on some TV hardware). onChanged
+    // fires live while typing, so search behaves the same as on phone.
+    if (AbkBreakpoints.isTv) {
+      return AbkFocusable(
+        onTap: () async {
+          void live() => onChanged?.call(controller.text);
+          controller.addListener(live);
+          await showTvKeyboard(context, controller, title: hint);
+          controller.removeListener(live);
+          onChanged?.call(controller.text);
+        },
+        autofocus: autofocus,
+        radius: AbkRadius.brPill,
+        semanticLabel: hint,
+        builder: (ctx, states) {
+          final focused = states.contains(WidgetState.focused);
+          return ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (_, v, __) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: c.surfaceElevated,
+                borderRadius: AbkRadius.brPill,
+                border: Border.all(
+                    color: focused ? c.accentPrimary : c.borderSubtle,
+                    width: focused ? 2 : 1),
+              ),
+              child: Row(children: [
+                Icon(Icons.search_rounded, color: c.textMuted, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(v.text.isEmpty ? hint : v.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.type.body.copyWith(
+                          color: v.text.isEmpty ? c.textMuted : c.textPrimary)),
+                ),
+              ]),
+            ),
+          );
+        },
+      );
+    }
     return TextField(
       controller: controller,
       focusNode: focusNode,
